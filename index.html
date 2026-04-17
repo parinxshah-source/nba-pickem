@@ -315,6 +315,7 @@
 
   <!-- Games Tab -->
   <div class="tab-content active" id="tab-games">
+    <div id="turnIndicator" class="picks-remaining" style="margin-bottom:8px;"></div>
     <div id="picksRemaining" class="picks-remaining"></div>
     <div id="gamesContainer"><div class="loading"><div class="spinner"></div><p>Loading games...</p></div></div>
   </div>
@@ -380,10 +381,30 @@ const db = firebase.database();
 // STATE
 // ============================================================
 const PLAYERS = ['Parin', 'Shamin', 'Zeeshan'];
+const ROTATION = ['Shamin', 'Parin', 'Zeeshan'];
+const ROTATION_START = '20260417'; // Shamin starts April 17, 2026
 const MAX_PICKS_PER_DAY = 2;
 let currentPlayer = null;
 let currentDate = getTodayET();
 let gamesCache = {};
+
+function getTodaysPicker(dateStr) {
+  const startY = parseInt(ROTATION_START.slice(0,4));
+  const startM = parseInt(ROTATION_START.slice(4,6)) - 1;
+  const startD = parseInt(ROTATION_START.slice(6,8));
+  const y = parseInt(dateStr.slice(0,4));
+  const m = parseInt(dateStr.slice(4,6)) - 1;
+  const d = parseInt(dateStr.slice(6,8));
+  const start = new Date(startY, startM, startD);
+  const current = new Date(y, m, d);
+  const diffDays = Math.round((current - start) / (1000 * 60 * 60 * 24));
+  const idx = ((diffDays % ROTATION.length) + ROTATION.length) % ROTATION.length;
+  return ROTATION[idx];
+}
+
+function isPlayersTurn(player, dateStr) {
+  return player === 'Admin' || player === getTodaysPicker(dateStr);
+}
 
 function getTodayET() {
   const now = new Date();
@@ -443,6 +464,14 @@ function updateDateDisplay() {
   el.textContent = displayDate(currentDate);
   if (currentDate === getTodayET()) {
     el.textContent += ' (Today)';
+  }
+  const picker = getTodaysPicker(currentDate);
+  const turnEl = document.getElementById('turnIndicator');
+  if (turnEl) {
+    turnEl.innerHTML = `<strong>${picker}</strong>'s turn to pick`;
+    if (currentPlayer && currentPlayer !== 'Admin' && currentPlayer !== picker) {
+      turnEl.innerHTML += ' — <span style="color:var(--red);">You cannot place picks today</span>';
+    }
   }
 }
 
@@ -630,6 +659,7 @@ function renderPickForm(game) {
   const form = document.getElementById(`pick-form-${game.id}`);
   if (!form) return;
   if (currentPlayer === 'Admin') { form.innerHTML = ''; return; }
+  if (!isPlayersTurn(currentPlayer, currentDate)) { form.innerHTML = ''; return; }
 
   const hasSpread = game.spread != null;
   const hasOU = game.overUnder != null;
@@ -677,6 +707,10 @@ function updateSideOptions(gameId) {
 
 async function submitPick(gameId) {
   if (currentPlayer === 'Admin') return;
+  if (!isPlayersTurn(currentPlayer, currentDate)) {
+    toast(`It's ${getTodaysPicker(currentDate)}'s turn to pick today!`, 'error');
+    return;
+  }
   const game = gamesCache[currentDate]?.find(g => g.id === gameId);
   if (!game) return;
 
