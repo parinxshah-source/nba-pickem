@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA Playoff Pick'em Tracker</title>
+<style>
+  :root {
+    --bg: #0f1118;
+    --surface: #1a1d2e;
+    --surface2: #242842;
+    --accent: #4a6cf7;
+    --accent-hover: #5d7dff;
+    --green: #22c55e;
+    --green-bg: rgba(34,197,94,0.12);
+    --red: #ef4444;
+    --red-bg: rgba(239,68,68,0.12);
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --border: #2d3154;
+    --gold: #fbbf24;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 12px; }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+    flex-wrap: wrap; gap: 8px;
+  }
+  header h1 { font-size: 1.3rem; font-weight: 700; }
+  header h1 span { color: var(--accent); }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .player-badge {
+    background: var(--accent); color: #fff; padding: 4px 12px;
+    border-radius: 20px; font-size: 0.85rem; font-weight: 600;
+  }
+  .btn {
+    padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 0.85rem; font-weight: 600; transition: all 0.2s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-outline {
+    background: transparent; color: var(--text-dim); border: 1px solid var(--border);
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+  .btn-danger { background: var(--red); color: #fff; }
+
+  /* Modal overlay */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal {
+    background: var(--surface); border-radius: 16px; padding: 32px;
+    width: 90%; max-width: 400px; text-align: center;
+  }
+  .modal h2 { margin-bottom: 8px; font-size: 1.4rem; }
+  .modal p { color: var(--text-dim); margin-bottom: 24px; font-size: 0.9rem; }
+  .player-grid { display: flex; flex-direction: column; gap: 10px; }
+  .player-btn {
+    padding: 14px; border: 2px solid var(--border); background: var(--surface2);
+    color: var(--text); border-radius: 12px; font-size: 1.1rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .player-btn:hover { border-color: var(--accent); background: var(--accent); }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 18px; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    color: var(--text-dim); border-bottom: 2px solid transparent; white-space: nowrap;
+    transition: all 0.2s; background: none; border-top: none; border-left: none; border-right: none;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover { color: var(--text); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Cards */
+  .card {
+    background: var(--surface); border-radius: 12px; padding: 16px;
+    margin-bottom: 12px; border: 1px solid var(--border);
+  }
+  .card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
+  }
+  .card-title { font-weight: 700; font-size: 1rem; }
+  .badge {
+    padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+  }
+  .badge-live { background: var(--red); color: #fff; animation: pulse 2s infinite; }
+  .badge-final { background: var(--green-bg); color: var(--green); }
+  .badge-upcoming { background: var(--surface2); color: var(--text-dim); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  /* Game cards */
+  .game-matchup {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; gap: 8px;
+  }
+  .team { text-align: center; flex: 1; }
+  .team-name { font-weight: 700; font-size: 0.95rem; }
+  .team-score { font-size: 1.5rem; font-weight: 800; color: var(--accent); margin-top: 2px; }
+  .team-record { font-size: 0.75rem; color: var(--text-dim); }
+  .vs { color: var(--text-dim); font-weight: 700; font-size: 0.8rem; }
+
+  .lines-row {
+    display: flex; gap: 8px; justify-content: center; margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .line-chip {
+    background: var(--surface2); padding: 4px 12px; border-radius: 8px;
+    font-size: 0.8rem; color: var(--text-dim);
+  }
+
+  /* Pick form */
+  .pick-form { display: flex; flex-direction: column; gap: 10px; }
+  .pick-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pick-row select, .pick-row input {
+    flex: 1; min-width: 100px; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); font-size: 0.85rem;
+  }
+  .pick-row select:focus, .pick-row input:focus { outline: none; border-color: var(--accent); }
+
+  /* Picks display */
+  .pick-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600;
+    margin: 4px;
+  }
+  .pick-win { background: var(--green-bg); color: var(--green); }
+  .pick-loss { background: var(--red-bg); color: var(--red); }
+  .pick-pending { background: var(--surface2); color: var(--text-dim); }
+
+  /* Dashboard */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px,1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; position: relative; overflow: hidden;
+  }
+  .stat-card.leader { border-color: var(--gold); }
+  .stat-card.leader::after {
+    content: '👑'; position: absolute; top: 8px; right: 12px; font-size: 1.2rem;
+  }
+  .stat-name { font-weight: 700; font-size: 1.1rem; margin-bottom: 8px; }
+  .stat-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.85rem; }
+  .stat-label { color: var(--text-dim); }
+  .stat-value { font-weight: 700; }
+  .stat-pnl { font-size: 1.3rem; font-weight: 800; margin-top: 6px; }
+  .pnl-pos { color: var(--green); }
+  .pnl-neg { color: var(--red); }
+  .pnl-zero { color: var(--text-dim); }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { text-align: left; padding: 10px 8px; color: var(--text-dim); font-weight: 600;
+    border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tr:hover { background: var(--surface2); }
+  .result-win { color: var(--green); font-weight: 700; }
+  .result-loss { color: var(--red); font-weight: 700; }
+
+  /* Admin */
+  .admin-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .admin-game { margin-bottom: 12px; }
+  .score-inputs { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .score-inputs input {
+    width: 70px; padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); font-size: 1rem; text-align: center;
+  }
+  .score-inputs input:focus { outline:none; border-color: var(--accent); }
+
+  /* Date nav */
+  .date-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; justify-content: center; }
+  .date-nav button { background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    width: 36px; height: 36px; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+  .date-nav button:hover { border-color: var(--accent); }
+  .date-display { font-weight: 700; font-size: 1rem; min-width: 140px; text-align: center; }
+
+  /* Manual line inputs */
+  .manual-lines { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .manual-lines label { font-size: 0.8rem; color: var(--text-dim); }
+  .manual-lines input {
+    width: 80px; padding: 6px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); font-size: 0.85rem; text-align: center;
+  }
+  .manual-lines input:focus { outline: none; border-color: var(--accent); }
+
+  /* Picks remaining */
+  .picks-remaining {
+    text-align: center; padding: 8px; background: var(--surface2);
+    border-radius: 8px; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-dim);
+  }
+  .picks-remaining strong { color: var(--accent); }
+
+  /* Existing picks list */
+  .existing-picks { margin-top: 8px; }
+  .existing-picks h4 { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 6px; }
+
+  /* Loading */
+  .loading { text-align: center; padding: 40px; color: var(--text-dim); }
+  .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 200; }
+  .toast {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 20px; margin-top: 8px; font-size: 0.85rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4); animation: slideIn 0.3s ease;
+  }
+  .toast-success { border-left: 4px solid var(--green); }
+  .toast-error { border-left: 4px solid var(--red); }
+  @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } }
+
+  /* No games */
+  .no-games { text-align: center; padding: 60px 20px; }
+  .no-games h3 { color: var(--text-dim); margin-bottom: 8px; }
+  .no-games p { color: var(--text-dim); font-size: 0.85rem; }
+
+  @media (max-width: 600px) {
+    .container { padding: 8px; }
+    header h1 { font-size: 1.1rem; }
+    .stats-grid { grid-template-columns: 1fr; }
+    .game-matchup { flex-direction: row; }
+    .team-name { font-size: 0.85rem; }
+    .pick-row { flex-direction: column; }
+    .pick-row select, .pick-row input { min-width: unset; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Player Selection Modal -->
+<div class="modal-overlay" id="playerModal">
+  <div class="modal">
+    <h2>NBA Playoff Pick'em</h2>
+    <p>Select your name to get started</p>
+    <div class="player-grid">
+      <button class="player-btn" onclick="selectPlayer('Parin')">Parin</button>
+      <button class="player-btn" onclick="selectPlayer('Shamin')">Shamin</button>
+      <button class="player-btn" onclick="selectPlayer('Zeeshan')">Zeeshan</button>
+    </div>
+    <div style="margin-top: 16px;">
+      <button class="btn btn-outline btn-sm" onclick="selectPlayer('Admin')">Enter as Admin</button>
+    </div>
+  </div>
+</div>
+
+<!-- Main App -->
+<div class="container" id="app" style="display:none">
+  <header>
+    <h1>🏀 <span>Playoff</span> Pick'em</h1>
+    <div class="header-right">
+      <span class="player-badge" id="currentPlayerBadge"></span>
+      <button class="btn btn-outline btn-sm" onclick="switchPlayer()">Switch</button>
+    </div>
+  </header>
+
+  <!-- Date Navigation -->
+  <div class="date-nav">
+    <button onclick="changeDate(-1)">‹</button>
+    <div class="date-display" id="dateDisplay"></div>
+    <button onclick="changeDate(1)">›</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="games" onclick="switchTab('games')">Today's Games</button>
+    <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab" data-tab="log" onclick="switchTab('log')">Game Log</button>
+    <button class="tab" data-tab="admin" onclick="switchTab('admin')">Admin</button>
+  </div>
+
+  <!-- Games Tab -->
+  <div class="tab-content active" id="tab-games">
+    <div id="picksRemaining" class="picks-remaining"></div>
+    <div id="gamesContainer"><div class="loading"><div class="spinner"></div><p>Loading games...</p></div></div>
+  </div>
+
+  <!-- Dashboard Tab -->
+  <div class="tab-content" id="tab-dashboard">
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Win/Loss by Player</div></div>
+      <div class="table-wrap"><table id="pivotTable"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- Game Log Tab -->
+  <div class="tab-content" id="tab-log">
+    <div class="card">
+      <div class="card-header"><div class="card-title">All Picks</div></div>
+      <div class="table-wrap"><table id="logTable"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- Admin Tab -->
+  <div class="tab-content" id="tab-admin">
+    <div class="admin-header">
+      <h3>Score Entry</h3>
+      <span class="badge badge-upcoming">Admin Mode</span>
+    </div>
+    <div id="adminGames"></div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ============================================================
+// FIREBASE CONFIG — Replace with your own Firebase project keys
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyCACUtqrtGkVeKi0ZuZHws3fwCOOzlX7AA",
+  authDomain: "nba-pickem-40de9.firebaseapp.com",
+  databaseURL: "https://nba-pickem-40de9-default-rtdb.firebaseio.com",
+  projectId: "nba-pickem-40de9",
+  storageBucket: "nba-pickem-40de9.firebasestorage.app",
+  messagingSenderId: "941428169309",
+  appId: "1:941428169309:web:9d2a31a0d851168fc80bb4"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ============================================================
+// STATE
+// ============================================================
+const PLAYERS = ['Parin', 'Shamin', 'Zeeshan'];
+const MAX_PICKS_PER_DAY = 2;
+let currentPlayer = null;
+let currentDate = getTodayET();
+let gamesCache = {};
+
+function getTodayET() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  return formatDate(et);
+}
+
+function formatDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}${m}${day}`;
+}
+
+function displayDate(ds) {
+  const y = ds.slice(0,4), m = ds.slice(4,6), d = ds.slice(6,8);
+  const date = new Date(y, m-1, d);
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ============================================================
+// PLAYER SELECTION
+// ============================================================
+function selectPlayer(name) {
+  currentPlayer = name;
+  document.getElementById('playerModal').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('currentPlayerBadge').textContent = name === 'Admin' ? '🔧 Admin' : name;
+  if (name === 'Admin') {
+    switchTab('admin');
+  }
+  loadGames();
+  setupRealtimeListeners();
+}
+
+function switchPlayer() {
+  document.getElementById('playerModal').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+// ============================================================
+// DATE NAVIGATION
+// ============================================================
+function changeDate(delta) {
+  const y = parseInt(currentDate.slice(0,4));
+  const m = parseInt(currentDate.slice(4,6)) - 1;
+  const d = parseInt(currentDate.slice(6,8));
+  const date = new Date(y, m, d + delta);
+  currentDate = formatDate(date);
+  updateDateDisplay();
+  loadGames();
+}
+
+function updateDateDisplay() {
+  const el = document.getElementById('dateDisplay');
+  el.textContent = displayDate(currentDate);
+  if (currentDate === getTodayET()) {
+    el.textContent += ' (Today)';
+  }
+}
+
+// ============================================================
+// ESPN API
+// ============================================================
+async function fetchESPNGames(dateStr) {
+  try {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const games = [];
+    for (const event of (data.events || [])) {
+      const comp = event.competitions[0];
+      const away = comp.competitors.find(c => c.homeAway === 'away');
+      const home = comp.competitors.find(c => c.homeAway === 'home');
+      const odds = comp.odds?.[0] || {};
+      const status = comp.status?.type?.name || 'STATUS_SCHEDULED';
+      const statusDesc = comp.status?.type?.shortDetail || '';
+      const game = {
+        id: event.id,
+        away: {
+          name: away.team.shortDisplayName || away.team.displayName,
+          abbr: away.team.abbreviation,
+          score: away.score ? parseInt(away.score) : null,
+          record: away.records?.[0]?.summary || ''
+        },
+        home: {
+          name: home.team.shortDisplayName || home.team.displayName,
+          abbr: home.team.abbreviation,
+          score: home.score ? parseInt(home.score) : null,
+          record: home.records?.[0]?.summary || ''
+        },
+        spread: odds.spread != null ? parseFloat(odds.spread) : null,
+        spreadTeam: odds.spread != null ? (parseFloat(odds.spread) < 0 ? home.team.abbreviation : away.team.abbreviation) : null,
+        overUnder: odds.overUnder != null ? parseFloat(odds.overUnder) : null,
+        status: status,
+        statusDesc: statusDesc,
+        startTime: event.date
+      };
+      // Determine favorite from details if available
+      if (odds.details) {
+        const match = odds.details.match(/^([A-Z]+)\s+([+-]?\d+\.?\d*)/);
+        if (match) {
+          game.spreadTeam = match[1];
+          game.spread = Math.abs(parseFloat(match[2]));
+        }
+      }
+      games.push(game);
+    }
+    return games;
+  } catch (e) {
+    console.error('ESPN fetch error:', e);
+    return [];
+  }
+}
+
+// ============================================================
+// LOAD & RENDER GAMES
+// ============================================================
+async function loadGames() {
+  updateDateDisplay();
+  const container = document.getElementById('gamesContainer');
+  container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading games...</p></div>';
+
+  const games = await fetchESPNGames(currentDate);
+  gamesCache[currentDate] = games;
+
+  // Also save game info to Firebase for reference
+  for (const g of games) {
+    db.ref(`games/${currentDate}/${g.id}/info`).update({
+      away: g.away.name,
+      awayAbbr: g.away.abbr,
+      home: g.home.name,
+      homeAbbr: g.home.abbr,
+    });
+    if (g.spread != null) {
+      db.ref(`games/${currentDate}/${g.id}/lines`).update({
+        spread: g.spread,
+        spreadTeam: g.spreadTeam,
+        overUnder: g.overUnder
+      });
+    }
+  }
+
+  renderGames(games);
+  renderAdminGames(games);
+  updatePicksRemaining();
+}
+
+function renderGames(games) {
+  const container = document.getElementById('gamesContainer');
+  if (!games.length) {
+    container.innerHTML = '<div class="no-games"><h3>No games scheduled</h3><p>Check another date or try again later.</p></div>';
+    return;
+  }
+  container.innerHTML = '';
+  games.forEach(g => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `game-${g.id}`;
+
+    const isFinal = g.status === 'STATUS_FINAL';
+    const isLive = g.status === 'STATUS_IN_PROGRESS' || g.status === 'STATUS_HALFTIME';
+    const badgeClass = isFinal ? 'badge-final' : isLive ? 'badge-live' : 'badge-upcoming';
+    const badgeText = isFinal ? 'Final' : isLive ? 'Live' : new Date(g.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+
+    let spreadText = g.spread != null ? `${g.spreadTeam} -${g.spread}` : 'No line';
+    let ouText = g.overUnder != null ? `O/U ${g.overUnder}` : 'No line';
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-title">${g.away.abbr} @ ${g.home.abbr}</div>
+        <span class="badge ${badgeClass}">${badgeText}</span>
+      </div>
+      <div class="game-matchup">
+        <div class="team">
+          <div class="team-name">${g.away.name}</div>
+          ${g.away.score != null ? `<div class="team-score">${g.away.score}</div>` : ''}
+          <div class="team-record">${g.away.record}</div>
+        </div>
+        <div class="vs">${isFinal || isLive ? '' : 'VS'}</div>
+        <div class="team">
+          <div class="team-name">${g.home.name}</div>
+          ${g.home.score != null ? `<div class="team-score">${g.home.score}</div>` : ''}
+          <div class="team-record">${g.home.record}</div>
+        </div>
+      </div>
+      <div class="lines-row">
+        <span class="line-chip" id="spread-chip-${g.id}">Spread: ${spreadText}</span>
+        <span class="line-chip" id="ou-chip-${g.id}">O/U: ${ouText}</span>
+      </div>
+      ${g.spread == null ? `
+      <div class="manual-lines" id="manual-lines-${g.id}">
+        <label>Spread:</label>
+        <select id="spread-team-${g.id}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.8rem;">
+          <option value="${g.home.abbr}">${g.home.abbr}</option>
+          <option value="${g.away.abbr}">${g.away.abbr}</option>
+        </select>
+        <input type="number" step="0.5" placeholder="-5.5" id="spread-val-${g.id}" style="width:65px;">
+        <label>O/U:</label>
+        <input type="number" step="0.5" placeholder="224.5" id="ou-val-${g.id}" style="width:65px;">
+        <button class="btn btn-primary btn-sm" onclick="saveManualLines('${g.id}')">Set</button>
+      </div>` : ''}
+      <div class="pick-form" id="pick-form-${g.id}"></div>
+      <div class="existing-picks" id="existing-picks-${g.id}"></div>
+    `;
+    container.appendChild(card);
+    renderPickForm(g);
+  });
+}
+
+function saveManualLines(gameId) {
+  const teamSel = document.getElementById(`spread-team-${gameId}`);
+  const spreadVal = document.getElementById(`spread-val-${gameId}`);
+  const ouVal = document.getElementById(`ou-val-${gameId}`);
+  const spread = parseFloat(spreadVal.value);
+  const ou = parseFloat(ouVal.value);
+  if (isNaN(spread) || isNaN(ou)) { toast('Enter valid spread and O/U', 'error'); return; }
+  const team = teamSel.value;
+
+  db.ref(`games/${currentDate}/${gameId}/lines`).set({
+    spread: Math.abs(spread),
+    spreadTeam: team,
+    overUnder: ou
+  });
+
+  // Update cache
+  const g = gamesCache[currentDate]?.find(x => x.id === gameId);
+  if (g) { g.spread = Math.abs(spread); g.spreadTeam = team; g.overUnder = ou; }
+
+  document.getElementById(`spread-chip-${gameId}`).textContent = `Spread: ${team} -${Math.abs(spread)}`;
+  document.getElementById(`ou-chip-${gameId}`).textContent = `O/U: ${ou}`;
+  const ml = document.getElementById(`manual-lines-${gameId}`);
+  if (ml) ml.style.display = 'none';
+
+  toast('Lines saved!', 'success');
+  renderPickForm(g);
+}
+
+// ============================================================
+// PICK FORM
+// ============================================================
+function renderPickForm(game) {
+  const form = document.getElementById(`pick-form-${game.id}`);
+  if (!form) return;
+  if (currentPlayer === 'Admin') { form.innerHTML = ''; return; }
+
+  const hasSpread = game.spread != null;
+  const hasOU = game.overUnder != null;
+  if (!hasSpread && !hasOU) {
+    form.innerHTML = '<p style="font-size:0.8rem;color:var(--text-dim);">Set lines above (or in Admin) to make picks.</p>';
+    return;
+  }
+
+  form.innerHTML = `
+    <div class="pick-row">
+      <select id="ptype-${game.id}" onchange="updateSideOptions('${game.id}')">
+        <option value="">Pick type...</option>
+        ${hasSpread ? `<option value="spread">Spread</option>` : ''}
+        ${hasOU ? `<option value="ou">Over/Under</option>` : ''}
+      </select>
+      <select id="pside-${game.id}">
+        <option value="">Side...</option>
+      </select>
+      <select id="pamount-${game.id}">
+        <option value="5">$5</option>
+        <option value="10">$10</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="submitPick('${game.id}')">Lock Pick</button>
+    </div>
+  `;
+}
+
+function updateSideOptions(gameId) {
+  const type = document.getElementById(`ptype-${gameId}`).value;
+  const side = document.getElementById(`pside-${gameId}`);
+  const game = gamesCache[currentDate]?.find(g => g.id === gameId);
+  if (!game) return;
+
+  side.innerHTML = '<option value="">Side...</option>';
+  if (type === 'spread') {
+    const favAbbr = game.spreadTeam;
+    const dogAbbr = favAbbr === game.home.abbr ? game.away.abbr : game.home.abbr;
+    side.innerHTML += `<option value="fav">${favAbbr} -${game.spread}</option>`;
+    side.innerHTML += `<option value="dog">${dogAbbr} +${game.spread}</option>`;
+  } else if (type === 'ou') {
+    side.innerHTML += `<option value="over">Over ${game.overUnder}</option>`;
+    side.innerHTML += `<option value="under">Under ${game.overUnder}</option>`;
+  }
+}
+
+async function submitPick(gameId) {
+  if (currentPlayer === 'Admin') return;
+  const game = gamesCache[currentDate]?.find(g => g.id === gameId);
+  if (!game) return;
+
+  const type = document.getElementById(`ptype-${gameId}`)?.value;
+  const side = document.getElementById(`pside-${gameId}`)?.value;
+  const amount = parseInt(document.getElementById(`pamount-${gameId}`)?.value || '5');
+
+  if (!type || !side) { toast('Select pick type and side', 'error'); return; }
+
+  // Check daily limit
+  const snap = await db.ref(`picks/${currentDate}/${currentPlayer}`).once('value');
+  const existingPicks = snap.val() || {};
+  const pickCount = Object.keys(existingPicks).length;
+
+  if (pickCount >= MAX_PICKS_PER_DAY) {
+    toast(`You've already made ${MAX_PICKS_PER_DAY} picks today!`, 'error');
+    return;
+  }
+
+  // Check duplicate game/type combo
+  for (const pid in existingPicks) {
+    const ep = existingPicks[pid];
+    if (ep.gameId === gameId && ep.type === type) {
+      toast('You already have a ' + type + ' pick for this game!', 'error');
+      return;
+    }
+  }
+
+  // Build pick description
+  let pickDesc = '';
+  if (type === 'spread') {
+    const favAbbr = game.spreadTeam;
+    const dogAbbr = favAbbr === game.home.abbr ? game.away.abbr : game.home.abbr;
+    pickDesc = side === 'fav' ? `${favAbbr} -${game.spread}` : `${dogAbbr} +${game.spread}`;
+  } else {
+    pickDesc = side === 'over' ? `Over ${game.overUnder}` : `Under ${game.overUnder}`;
+  }
+
+  const pick = {
+    gameId,
+    gameLabel: `${game.away.abbr} @ ${game.home.abbr}`,
+    type,
+    side,
+    desc: pickDesc,
+    amount,
+    result: 'pending',
+    timestamp: Date.now(),
+    spread: game.spread,
+    spreadTeam: game.spreadTeam,
+    overUnder: game.overUnder
+  };
+
+  await db.ref(`picks/${currentDate}/${currentPlayer}`).push(pick);
+  toast(`Pick locked: ${pickDesc} ($${amount})`, 'success');
+  updatePicksRemaining();
+}
+
+async function updatePicksRemaining() {
+  const el = document.getElementById('picksRemaining');
+  if (currentPlayer === 'Admin') { el.textContent = 'Admin mode — view only'; return; }
+  const snap = await db.ref(`picks/${currentDate}/${currentPlayer}`).once('value');
+  const count = snap.val() ? Object.keys(snap.val()).length : 0;
+  const rem = MAX_PICKS_PER_DAY - count;
+  el.innerHTML = rem > 0
+    ? `<strong>${rem}</strong> pick${rem !== 1 ? 's' : ''} remaining today`
+    : 'All picks submitted for today ✓';
+}
+
+// ============================================================
+// REAL-TIME LISTENERS
+// ============================================================
+function setupRealtimeListeners() {
+  // Listen for picks on current date
+  db.ref(`picks/${currentDate}`).on('value', snap => {
+    const allPicks = snap.val() || {};
+    renderAllExistingPicks(allPicks);
+    updatePicksRemaining();
+  });
+
+  // Listen for score entries
+  db.ref(`games/${currentDate}`).on('value', snap => {
+    const gamesData = snap.val() || {};
+    updateScoresFromDB(gamesData);
+  });
+}
+
+function renderAllExistingPicks(allPicks) {
+  const games = gamesCache[currentDate] || [];
+  for (const g of games) {
+    const container = document.getElementById(`existing-picks-${g.id}`);
+    if (!container) continue;
+    let html = '';
+    for (const player of PLAYERS) {
+      const playerPicks = allPicks[player] || {};
+      for (const pid in playerPicks) {
+        const p = playerPicks[pid];
+        if (p.gameId !== g.id) continue;
+        const rClass = p.result === 'win' ? 'pick-win' : p.result === 'loss' ? 'pick-loss' : 'pick-pending';
+        const rText = p.result === 'win' ? '✓ W' : p.result === 'loss' ? '✗ L' : '⏳';
+        html += `<span class="pick-tag ${rClass}">${player}: ${p.desc} ($${p.amount}) ${rText}</span>`;
+      }
+    }
+    container.innerHTML = html ? `<h4>Picks</h4>${html}` : '';
+  }
+
+  // Hide pick form if player has used both picks
+  if (currentPlayer !== 'Admin') {
+    const myPicks = allPicks[currentPlayer] || {};
+    const myCount = Object.keys(myPicks).length;
+    if (myCount >= MAX_PICKS_PER_DAY) {
+      for (const g of games) {
+        const form = document.getElementById(`pick-form-${g.id}`);
+        if (form) form.innerHTML = '';
+      }
+    }
+    // Also hide form for games where player already has both types
+    for (const g of games) {
+      const form = document.getElementById(`pick-form-${g.id}`);
+      if (!form) continue;
+      const gamePicks = Object.values(myPicks).filter(p => p.gameId === g.id);
+      const hasSpread = gamePicks.some(p => p.type === 'spread');
+      const hasOU = gamePicks.some(p => p.type === 'ou');
+      if (hasSpread && hasOU && form.innerHTML) {
+        form.innerHTML = '';
+      }
+    }
+  }
+}
+
+function updateScoresFromDB(gamesData) {
+  for (const gid in gamesData) {
+    const gd = gamesData[gid];
+    if (gd.finalScore) {
+      const awayScoreEl = document.querySelector(`#game-${gid} .team:first-child .team-score`);
+      const homeScoreEl = document.querySelector(`#game-${gid} .team:last-child .team-score`);
+      if (awayScoreEl) awayScoreEl.textContent = gd.finalScore.away;
+      if (homeScoreEl) homeScoreEl.textContent = gd.finalScore.home;
+    }
+  }
+}
+
+// ============================================================
+// ADMIN — SCORE ENTRY
+// ============================================================
+function renderAdminGames(games) {
+  const container = document.getElementById('adminGames');
+  if (!games.length) {
+    container.innerHTML = '<div class="no-games"><h3>No games to score</h3></div>';
+    return;
+  }
+  container.innerHTML = '';
+  games.forEach(g => {
+    const div = document.createElement('div');
+    div.className = 'card admin-game';
+    div.innerHTML = `
+      <div class="card-header">
+        <div class="card-title">${g.away.abbr} @ ${g.home.abbr}</div>
+      </div>
+      ${g.spread == null ? `
+      <div class="manual-lines" style="margin-bottom:12px;">
+        <label>Spread:</label>
+        <select id="admin-spread-team-${g.id}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.8rem;">
+          <option value="${g.home.abbr}">${g.home.abbr}</option>
+          <option value="${g.away.abbr}">${g.away.abbr}</option>
+        </select>
+        <input type="number" step="0.5" placeholder="-5.5" id="admin-spread-val-${g.id}" style="width:65px;">
+        <label>O/U:</label>
+        <input type="number" step="0.5" placeholder="224.5" id="admin-ou-val-${g.id}" style="width:65px;">
+        <button class="btn btn-primary btn-sm" onclick="saveAdminLines('${g.id}')">Set Lines</button>
+      </div>` : ''}
+      <div class="score-inputs">
+        <label>${g.away.abbr}:</label>
+        <input type="number" id="score-away-${g.id}" placeholder="0" value="${g.away.score || ''}">
+        <label>${g.home.abbr}:</label>
+        <input type="number" id="score-home-${g.id}" placeholder="0" value="${g.home.score || ''}">
+        <button class="btn btn-primary btn-sm" onclick="saveScore('${g.id}')">Save Score</button>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+
+  // Load saved scores
+  db.ref(`games/${currentDate}`).once('value', snap => {
+    const gd = snap.val() || {};
+    for (const gid in gd) {
+      if (gd[gid].finalScore) {
+        const awayInput = document.getElementById(`score-away-${gid}`);
+        const homeInput = document.getElementById(`score-home-${gid}`);
+        if (awayInput) awayInput.value = gd[gid].finalScore.away;
+        if (homeInput) homeInput.value = gd[gid].finalScore.home;
+      }
+      if (gd[gid].lines) {
+        const g = gamesCache[currentDate]?.find(x => x.id === gid);
+        if (g && g.spread == null) {
+          g.spread = gd[gid].lines.spread;
+          g.spreadTeam = gd[gid].lines.spreadTeam;
+          g.overUnder = gd[gid].lines.overUnder;
+        }
+      }
+    }
+  });
+}
+
+function saveAdminLines(gameId) {
+  const teamSel = document.getElementById(`admin-spread-team-${gameId}`);
+  const spreadVal = document.getElementById(`admin-spread-val-${gameId}`);
+  const ouVal = document.getElementById(`admin-ou-val-${gameId}`);
+  const spread = parseFloat(spreadVal.value);
+  const ou = parseFloat(ouVal.value);
+  if (isNaN(spread) || isNaN(ou)) { toast('Enter valid values', 'error'); return; }
+
+  db.ref(`games/${currentDate}/${gameId}/lines`).set({
+    spread: Math.abs(spread),
+    spreadTeam: teamSel.value,
+    overUnder: ou
+  });
+
+  const g = gamesCache[currentDate]?.find(x => x.id === gameId);
+  if (g) { g.spread = Math.abs(spread); g.spreadTeam = teamSel.value; g.overUnder = ou; }
+  toast('Lines saved!', 'success');
+}
+
+async function saveScore(gameId) {
+  const away = parseInt(document.getElementById(`score-away-${gameId}`).value);
+  const home = parseInt(document.getElementById(`score-home-${gameId}`).value);
+  if (isNaN(away) || isNaN(home)) { toast('Enter valid scores', 'error'); return; }
+
+  await db.ref(`games/${currentDate}/${gameId}/finalScore`).set({ away, home });
+  toast('Score saved! Evaluating picks...', 'success');
+  await evaluatePicks(gameId, away, home);
+}
+
+// ============================================================
+// PICK EVALUATION
+// ============================================================
+async function evaluatePicks(gameId, awayScore, homeScore) {
+  // Get lines from Firebase
+  const linesSnap = await db.ref(`games/${currentDate}/${gameId}/lines`).once('value');
+  const lines = linesSnap.val();
+  const game = gamesCache[currentDate]?.find(g => g.id === gameId);
+
+  const spread = lines?.spread ?? game?.spread;
+  const spreadTeam = lines?.spreadTeam ?? game?.spreadTeam;
+  const overUnder = lines?.overUnder ?? game?.overUnder;
+
+  if (spread == null && overUnder == null) {
+    toast('No lines set for this game — cannot evaluate', 'error');
+    return;
+  }
+
+  const homeAbbr = game?.home?.abbr;
+  const awayAbbr = game?.away?.abbr;
+  const totalScore = awayScore + homeScore;
+  const homeMargin = homeScore - awayScore;
+
+  // Evaluate all players' picks for this game
+  for (const player of PLAYERS) {
+    const snap = await db.ref(`picks/${currentDate}/${player}`).once('value');
+    const picks = snap.val() || {};
+    for (const pid in picks) {
+      const pick = picks[pid];
+      if (pick.gameId !== gameId) continue;
+      if (pick.result !== 'pending') continue;
+
+      let result = 'pending';
+      const pickSpread = pick.spread ?? spread;
+      const pickSpreadTeam = pick.spreadTeam ?? spreadTeam;
+      const pickOU = pick.overUnder ?? overUnder;
+
+      if (pick.type === 'spread' && pickSpread != null) {
+        // Determine if favorite covered
+        const favIsHome = pickSpreadTeam === homeAbbr;
+        const favMargin = favIsHome ? homeMargin : -homeMargin;
+        const favCovered = favMargin > pickSpread; // fav wins by more than spread
+        // push = exactly covers
+        if (favMargin === pickSpread) {
+          result = 'push';
+        } else if (pick.side === 'fav') {
+          result = favCovered ? 'win' : 'loss';
+        } else {
+          result = favCovered ? 'loss' : 'win';
+        }
+      } else if (pick.type === 'ou' && pickOU != null) {
+        if (totalScore === pickOU) {
+          result = 'push';
+        } else if (pick.side === 'over') {
+          result = totalScore > pickOU ? 'win' : 'loss';
+        } else {
+          result = totalScore < pickOU ? 'win' : 'loss';
+        }
+      }
+
+      if (result !== 'pending') {
+        await db.ref(`picks/${currentDate}/${player}/${pid}/result`).set(result);
+      }
+    }
+  }
+  toast('All picks evaluated!', 'success');
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
+  if (tab === 'dashboard') loadDashboard();
+  if (tab === 'log') loadGameLog();
+}
+
+async function loadDashboard() {
+  // Fetch ALL picks across all dates
+  const snap = await db.ref('picks').once('value');
+  const allData = snap.val() || {};
+
+  const stats = {};
+  PLAYERS.forEach(p => stats[p] = { wins: 0, losses: 0, pushes: 0, pnl: 0, picks: 0 });
+
+  for (const date in allData) {
+    for (const player in allData[date]) {
+      if (!stats[player]) continue;
+      const picks = allData[date][player];
+      for (const pid in picks) {
+        const p = picks[pid];
+        stats[player].picks++;
+        if (p.result === 'win') { stats[player].wins++; stats[player].pnl += p.amount; }
+        else if (p.result === 'loss') { stats[player].losses++; stats[player].pnl -= p.amount; }
+        else if (p.result === 'push') { stats[player].pushes++; }
+      }
+    }
+  }
+
+  // Find leader
+  let maxPnl = -Infinity;
+  let leader = '';
+  PLAYERS.forEach(p => { if (stats[p].pnl > maxPnl) { maxPnl = stats[p].pnl; leader = p; } });
+
+  const grid = document.getElementById('statsGrid');
+  grid.innerHTML = '';
+  PLAYERS.forEach(p => {
+    const s = stats[p];
+    const total = s.wins + s.losses;
+    const pct = total > 0 ? ((s.wins / total) * 100).toFixed(1) : '0.0';
+    const pnlClass = s.pnl > 0 ? 'pnl-pos' : s.pnl < 0 ? 'pnl-neg' : 'pnl-zero';
+    const pnlSign = s.pnl > 0 ? '+' : '';
+    const isLeader = p === leader && maxPnl > 0;
+    grid.innerHTML += `
+      <div class="stat-card ${isLeader ? 'leader' : ''}">
+        <div class="stat-name">${p}</div>
+        <div class="stat-row"><span class="stat-label">Wins</span><span class="stat-value result-win">${s.wins}</span></div>
+        <div class="stat-row"><span class="stat-label">Losses</span><span class="stat-value result-loss">${s.losses}</span></div>
+        ${s.pushes > 0 ? `<div class="stat-row"><span class="stat-label">Pushes</span><span class="stat-value">${s.pushes}</span></div>` : ''}
+        <div class="stat-row"><span class="stat-label">Win %</span><span class="stat-value">${pct}%</span></div>
+        <div class="stat-row"><span class="stat-label">Total Picks</span><span class="stat-value">${s.picks}</span></div>
+        <div class="stat-pnl ${pnlClass}">${pnlSign}$${s.pnl}</div>
+      </div>
+    `;
+  });
+
+  // Pivot table
+  const pivot = document.getElementById('pivotTable');
+  pivot.innerHTML = `
+    <thead><tr><th>Player</th><th>W</th><th>L</th><th>P</th><th>Win%</th><th>P&L</th></tr></thead>
+    <tbody>
+      ${PLAYERS.map(p => {
+        const s = stats[p];
+        const total = s.wins + s.losses;
+        const pct = total > 0 ? ((s.wins / total) * 100).toFixed(1) : '0.0';
+        const pnlClass = s.pnl > 0 ? 'result-win' : s.pnl < 0 ? 'result-loss' : '';
+        const pnlSign = s.pnl > 0 ? '+' : '';
+        return `<tr><td>${p}</td><td class="result-win">${s.wins}</td><td class="result-loss">${s.losses}</td><td>${s.pushes}</td><td>${pct}%</td><td class="${pnlClass}">${pnlSign}$${s.pnl}</td></tr>`;
+      }).join('')}
+    </tbody>
+  `;
+}
+
+// ============================================================
+// GAME LOG
+// ============================================================
+async function loadGameLog() {
+  const snap = await db.ref('picks').once('value');
+  const allData = snap.val() || {};
+
+  const rows = [];
+  for (const date in allData) {
+    for (const player in allData[date]) {
+      const picks = allData[date][player];
+      for (const pid in picks) {
+        const p = picks[pid];
+        rows.push({ date, player, ...p });
+      }
+    }
+  }
+
+  // Sort by date desc, then timestamp desc
+  rows.sort((a, b) => b.date.localeCompare(a.date) || (b.timestamp || 0) - (a.timestamp || 0));
+
+  // Compute running total per player
+  const running = {};
+  PLAYERS.forEach(p => running[p] = 0);
+  // Need to process in chronological order for running total
+  const chronoRows = [...rows].reverse();
+  chronoRows.forEach(r => {
+    if (r.result === 'win') running[r.player] += r.amount;
+    else if (r.result === 'loss') running[r.player] -= r.amount;
+    r.runningTotal = running[r.player];
+  });
+
+  const table = document.getElementById('logTable');
+  const dateFormatted = (ds) => {
+    const y = ds.slice(0,4), m = ds.slice(4,6), d = ds.slice(6,8);
+    return `${m}/${d}`;
+  };
+
+  table.innerHTML = `
+    <thead><tr><th>Date</th><th>Game</th><th>Pick</th><th>Bettor</th><th>Amt</th><th>Result</th><th>Running</th></tr></thead>
+    <tbody>
+      ${rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:30px;">No picks yet</td></tr>' :
+        rows.map(r => {
+          const rClass = r.result === 'win' ? 'result-win' : r.result === 'loss' ? 'result-loss' : '';
+          const rText = r.result === 'win' ? 'WIN' : r.result === 'loss' ? 'LOSS' : r.result === 'push' ? 'PUSH' : '—';
+          const rtClass = r.runningTotal > 0 ? 'result-win' : r.runningTotal < 0 ? 'result-loss' : '';
+          const rtSign = r.runningTotal > 0 ? '+' : '';
+          return `<tr>
+            <td>${dateFormatted(r.date)}</td>
+            <td>${r.gameLabel || '—'}</td>
+            <td>${r.desc || '—'}</td>
+            <td>${r.player}</td>
+            <td>$${r.amount}</td>
+            <td class="${rClass}">${rText}</td>
+            <td class="${rtClass}">${rtSign}$${r.runningTotal}</td>
+          </tr>`;
+        }).join('')}
+    </tbody>
+  `;
+}
+
+// ============================================================
+// TOAST NOTIFICATIONS
+// ============================================================
+function toast(msg, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ============================================================
+// DATE CHANGE LISTENER
+// ============================================================
+const origChangeDate = changeDate;
+// When date changes, re-bind realtime listeners
+const _changeDate = changeDate;
+changeDate = function(delta) {
+  // Unbind old listeners
+  db.ref(`picks/${currentDate}`).off();
+  db.ref(`games/${currentDate}`).off();
+  _changeDate(delta);
+  setupRealtimeListeners();
+};
+
+// ============================================================
+// INIT
+// ============================================================
+updateDateDisplay();
+</script>
+</body>
+</html>
