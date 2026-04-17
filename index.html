@@ -235,6 +235,30 @@
   .no-games h3 { color: var(--text-dim); margin-bottom: 8px; }
   .no-games p { color: var(--text-dim); font-size: 0.85rem; }
 
+  /* Admin pick management */
+  .admin-pick-row {
+    display: flex; align-items: center; gap: 8px; padding: 10px;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap; font-size: 0.85rem;
+  }
+  .admin-pick-row:last-child { border-bottom: none; }
+  .admin-pick-info { flex: 1; min-width: 150px; }
+  .admin-pick-player { font-weight: 700; color: var(--accent); }
+  .admin-pick-actions { display: flex; gap: 6px; }
+  .btn-icon {
+    width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text-dim); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+  }
+  .btn-icon:hover { border-color: var(--accent); color: var(--text); }
+  .btn-icon.delete:hover { border-color: var(--red); color: var(--red); }
+  .edit-pick-form {
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px;
+  }
+  .edit-pick-form select, .edit-pick-form input {
+    padding: 6px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); font-size: 0.8rem;
+  }
+
   @media (max-width: 600px) {
     .container { padding: 8px; }
     header h1 { font-size: 1.1rem; }
@@ -319,6 +343,12 @@
       <span class="badge badge-upcoming">Admin Mode</span>
     </div>
     <div id="adminGames"></div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-header">
+        <div class="card-title">Manage Picks</div>
+      </div>
+      <div id="adminPicks"><p style="color:var(--text-dim);font-size:0.85rem;">Loading picks...</p></div>
+    </div>
   </div>
 </div>
 
@@ -384,6 +414,7 @@ function selectPlayer(name) {
   document.getElementById('currentPlayerBadge').textContent = name === 'Admin' ? '🔧 Admin' : name;
   if (name === 'Admin') {
     switchTab('admin');
+    setupAdminPicksListener();
   }
   loadGames();
   setupRealtimeListeners();
@@ -879,6 +910,93 @@ async function saveScore(gameId) {
 }
 
 // ============================================================
+// ADMIN — PICK MANAGEMENT
+// ============================================================
+function setupAdminPicksListener() {
+  db.ref(`picks/${currentDate}`).on('value', snap => {
+    renderAdminPicks(snap.val() || {});
+  });
+}
+
+function renderAdminPicks(allPicks) {
+  const container = document.getElementById('adminPicks');
+  if (!container) return;
+  let html = '';
+  let hasPicks = false;
+
+  for (const player of PLAYERS) {
+    const playerPicks = allPicks[player] || {};
+    for (const pid in playerPicks) {
+      hasPicks = true;
+      const p = playerPicks[pid];
+      const rClass = p.result === 'win' ? 'result-win' : p.result === 'loss' ? 'result-loss' : '';
+      const rText = p.result === 'win' ? 'WIN' : p.result === 'loss' ? 'LOSS' : p.result === 'push' ? 'PUSH' : 'Pending';
+      html += `
+        <div class="admin-pick-row" id="admin-pick-${player}-${pid}">
+          <div class="admin-pick-info">
+            <span class="admin-pick-player">${player}</span> —
+            ${p.gameLabel || '?'}: ${p.desc || '?'} ($${p.amount})
+            <span class="${rClass}" style="font-weight:700;"> ${rText}</span>
+          </div>
+          <div class="admin-pick-actions">
+            <button class="btn-icon" onclick="toggleEditPick('${player}','${pid}')" title="Edit">&#9998;</button>
+            <button class="btn-icon delete" onclick="deletePick('${player}','${pid}')" title="Delete">&#10005;</button>
+          </div>
+          <div class="edit-pick-form" id="edit-form-${player}-${pid}" style="display:none;width:100%;"></div>
+        </div>`;
+    }
+  }
+
+  container.innerHTML = hasPicks ? html : '<p style="color:var(--text-dim);font-size:0.85rem;padding:8px;">No picks for this date.</p>';
+}
+
+function toggleEditPick(player, pid) {
+  const form = document.getElementById(`edit-form-${player}-${pid}`);
+  if (!form) return;
+  if (form.style.display === 'none') {
+    // Load current pick data and show edit form
+    db.ref(`picks/${currentDate}/${player}/${pid}`).once('value', snap => {
+      const p = snap.val();
+      if (!p) return;
+      form.style.display = 'flex';
+      form.innerHTML = `
+        <select id="edit-result-${player}-${pid}">
+          <option value="pending" ${p.result==='pending'?'selected':''}>Pending</option>
+          <option value="win" ${p.result==='win'?'selected':''}>Win</option>
+          <option value="loss" ${p.result==='loss'?'selected':''}>Loss</option>
+          <option value="push" ${p.result==='push'?'selected':''}>Push</option>
+        </select>
+        <select id="edit-amount-${player}-${pid}">
+          <option value="5" ${p.amount===5?'selected':''}>$5</option>
+          <option value="10" ${p.amount===10?'selected':''}>$10</option>
+        </select>
+        <input type="text" id="edit-desc-${player}-${pid}" value="${p.desc || ''}" style="width:140px;" placeholder="Pick desc">
+        <button class="btn btn-primary btn-sm" onclick="saveEditPick('${player}','${pid}')">Save</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('edit-form-${player}-${pid}').style.display='none'">Cancel</button>
+      `;
+    });
+  } else {
+    form.style.display = 'none';
+  }
+}
+
+async function saveEditPick(player, pid) {
+  const result = document.getElementById(`edit-result-${player}-${pid}`).value;
+  const amount = parseInt(document.getElementById(`edit-amount-${player}-${pid}`).value);
+  const desc = document.getElementById(`edit-desc-${player}-${pid}`).value;
+
+  await db.ref(`picks/${currentDate}/${player}/${pid}`).update({ result, amount, desc });
+  document.getElementById(`edit-form-${player}-${pid}`).style.display = 'none';
+  toast('Pick updated!', 'success');
+}
+
+async function deletePick(player, pid) {
+  if (!confirm(`Delete ${player}'s pick? This cannot be undone.`)) return;
+  await db.ref(`picks/${currentDate}/${player}/${pid}`).remove();
+  toast('Pick deleted', 'success');
+}
+
+// ============================================================
 // PICK EVALUATION
 // ============================================================
 async function evaluatePicks(gameId, awayScore, homeScore) {
@@ -954,6 +1072,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'log') loadGameLog();
+  if (tab === 'admin') setupAdminPicksListener();
 }
 
 async function loadDashboard() {
