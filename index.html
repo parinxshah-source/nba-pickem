@@ -352,6 +352,24 @@
   <div class="tab-content" id="tab-dashboard">
     <div class="stats-grid" id="statsGrid"></div>
     <div class="card">
+      <div class="card-header"><div class="card-title">Running P&L Over Time</div></div>
+      <canvas id="chartPnl" height="250" style="width:100%;"></canvas>
+    </div>
+    <div class="stats-grid" style="margin-top:12px;">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Wins / Losses by Player</div></div>
+        <canvas id="chartWinLoss" height="200" style="width:100%;"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Record by Bet Type</div></div>
+        <canvas id="chartBetType" height="200" style="width:100%;"></canvas>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <div class="card-header"><div class="card-title">Win % Trend Over Time</div></div>
+      <canvas id="chartWinPct" height="250" style="width:100%;"></canvas>
+    </div>
+    <div class="card" style="margin-top:12px;">
       <div class="card-header"><div class="card-title">Win/Loss by Player</div></div>
       <div class="table-wrap"><table id="pivotTable"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -1304,13 +1322,16 @@ function switchTab(tab) {
 }
 
 async function loadDashboard() {
-  // Fetch ALL picks across all dates
   const snap = await db.ref('picks').once('value');
   const allData = snap.val() || {};
 
+  // Aggregate stats
   const stats = {};
-  PLAYERS.forEach(p => stats[p] = { wins: 0, losses: 0, pushes: 0, pnl: 0, picks: 0 });
+  PLAYERS.forEach(p => stats[p] = { wins: 0, losses: 0, pushes: 0, pnl: 0, picks: 0,
+    spreadW: 0, spreadL: 0, ouW: 0, ouL: 0 });
 
+  // Time-series data: collect all picks with dates, sorted chronologically
+  const allPicks = [];
   for (const date in allData) {
     for (const player in allData[date]) {
       if (!stats[player]) continue;
@@ -1318,18 +1339,47 @@ async function loadDashboard() {
       for (const pid in picks) {
         const p = picks[pid];
         stats[player].picks++;
-        if (p.result === 'win') { stats[player].wins++; stats[player].pnl += p.amount; }
-        else if (p.result === 'loss') { stats[player].losses++; stats[player].pnl -= p.amount; }
-        else if (p.result === 'push') { stats[player].pushes++; }
+        if (p.result === 'win') {
+          stats[player].wins++; stats[player].pnl += p.amount;
+          if (p.type === 'spread') stats[player].spreadW++;
+          else if (p.type === 'ou') stats[player].ouW++;
+        } else if (p.result === 'loss') {
+          stats[player].losses++; stats[player].pnl -= p.amount;
+          if (p.type === 'spread') stats[player].spreadL++;
+          else if (p.type === 'ou') stats[player].ouL++;
+        } else if (p.result === 'push') { stats[player].pushes++; }
+        allPicks.push({ date, player, ...p });
       }
     }
   }
 
+  // Sort chronologically
+  allPicks.sort((a, b) => a.date.localeCompare(b.date) || (a.timestamp || 0) - (b.timestamp || 0));
+
+  // Build time-series: running P&L and win% per player per date
+  const dates = [...new Set(allPicks.map(p => p.date))].sort();
+  const runningPnl = {}; const runningWins = {}; const runningTotal = {};
+  PLAYERS.forEach(p => { runningPnl[p] = []; runningWins[p] = []; runningTotal[p] = []; });
+  const cumPnl = {}; const cumW = {}; const cumT = {};
+  PLAYERS.forEach(p => { cumPnl[p] = 0; cumW[p] = 0; cumT[p] = 0; });
+
+  for (const date of dates) {
+    const dayPicks = allPicks.filter(p => p.date === date);
+    for (const pick of dayPicks) {
+      if (pick.result === 'win') { cumPnl[pick.player] += pick.amount; cumW[pick.player]++; cumT[pick.player]++; }
+      else if (pick.result === 'loss') { cumPnl[pick.player] -= pick.amount; cumT[pick.player]++; }
+    }
+    PLAYERS.forEach(p => {
+      runningPnl[p].push(cumPnl[p]);
+      runningWins[p].push(cumT[p] > 0 ? (cumW[p] / cumT[p]) * 100 : 0);
+    });
+  }
+
   // Find leader
-  let maxPnl = -Infinity;
-  let leader = '';
+  let maxPnl = -Infinity; let leader = '';
   PLAYERS.forEach(p => { if (stats[p].pnl > maxPnl) { maxPnl = stats[p].pnl; leader = p; } });
 
+  // Render stat cards
   const grid = document.getElementById('statsGrid');
   grid.innerHTML = '';
   PLAYERS.forEach(p => {
@@ -1352,10 +1402,31 @@ async function loadDashboard() {
     `;
   });
 
+  // ---- CHARTS ----
+  const COLORS = { Parin: '#4a6cf7', Shamin: '#22c55e', Zeeshan: '#fbbf24' };
+
+  // 1. Running P&L line chart
+  drawLineChart('chartPnl', dates, runningPnl, COLORS, '$', 'P&L');
+
+  // 2. Win/Loss bar chart
+  drawGroupedBarChart('chartWinLoss', PLAYERS, COLORS,
+    [{ label: 'Wins', values: PLAYERS.map(p => stats[p].wins), color: '#22c55e' },
+     { label: 'Losses', values: PLAYERS.map(p => stats[p].losses), color: '#ef4444' }]);
+
+  // 3. Bet type bar chart
+  drawGroupedBarChart('chartBetType', PLAYERS, COLORS,
+    [{ label: 'Spread W', values: PLAYERS.map(p => stats[p].spreadW), color: '#4a6cf7' },
+     { label: 'Spread L', values: PLAYERS.map(p => stats[p].spreadL), color: '#6366f1' },
+     { label: 'O/U W', values: PLAYERS.map(p => stats[p].ouW), color: '#22c55e' },
+     { label: 'O/U L', values: PLAYERS.map(p => stats[p].ouL), color: '#ef4444' }]);
+
+  // 4. Win % trend line chart
+  drawLineChart('chartWinPct', dates, runningWins, COLORS, '%', 'Win %');
+
   // Pivot table
   const pivot = document.getElementById('pivotTable');
   pivot.innerHTML = `
-    <thead><tr><th>Player</th><th>W</th><th>L</th><th>P</th><th>Win%</th><th>P&L</th></tr></thead>
+    <thead><tr><th>Player</th><th>W</th><th>L</th><th>P</th><th>Win%</th><th>Spr W-L</th><th>O/U W-L</th><th>P&L</th></tr></thead>
     <tbody>
       ${PLAYERS.map(p => {
         const s = stats[p];
@@ -1363,10 +1434,168 @@ async function loadDashboard() {
         const pct = total > 0 ? ((s.wins / total) * 100).toFixed(1) : '0.0';
         const pnlClass = s.pnl > 0 ? 'result-win' : s.pnl < 0 ? 'result-loss' : '';
         const pnlSign = s.pnl > 0 ? '+' : '';
-        return `<tr><td>${p}</td><td class="result-win">${s.wins}</td><td class="result-loss">${s.losses}</td><td>${s.pushes}</td><td>${pct}%</td><td class="${pnlClass}">${pnlSign}$${s.pnl}</td></tr>`;
+        return `<tr><td>${p}</td><td class="result-win">${s.wins}</td><td class="result-loss">${s.losses}</td><td>${s.pushes}</td><td>${pct}%</td><td>${s.spreadW}-${s.spreadL}</td><td>${s.ouW}-${s.ouL}</td><td class="${pnlClass}">${pnlSign}$${s.pnl}</td></tr>`;
       }).join('')}
     </tbody>
   `;
+}
+
+// ============================================================
+// CHART DRAWING (pure Canvas, no dependencies)
+// ============================================================
+function setupCanvas(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+function drawLineChart(canvasId, dates, seriesData, colors, suffix, label) {
+  const { ctx, w, h } = setupCanvas(canvasId);
+  if (dates.length === 0) {
+    ctx.fillStyle = '#94a3b8'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('No data yet', w/2, h/2); return;
+  }
+
+  const pad = { top: 20, right: 20, bottom: 40, left: 50 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  // Find min/max across all series
+  let allVals = [];
+  PLAYERS.forEach(p => allVals.push(...(seriesData[p] || [])));
+  let minV = Math.min(0, ...allVals);
+  let maxV = Math.max(0, ...allVals);
+  if (minV === maxV) { minV -= 5; maxV += 5; }
+  const range = maxV - minV;
+
+  // Grid lines
+  ctx.strokeStyle = '#2d3154'; ctx.lineWidth = 1;
+  const gridLines = 5;
+  for (let i = 0; i <= gridLines; i++) {
+    const y = pad.top + (ch / gridLines) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
+    const val = maxV - (range / gridLines) * i;
+    ctx.fillStyle = '#94a3b8'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(`${suffix === '$' ? '$' : ''}${Math.round(val)}${suffix === '%' ? '%' : ''}`, pad.left - 6, y + 4);
+  }
+
+  // X-axis labels
+  ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+  const maxLabels = Math.min(dates.length, 10);
+  const step = Math.max(1, Math.floor(dates.length / maxLabels));
+  for (let i = 0; i < dates.length; i += step) {
+    const x = pad.left + (i / (dates.length - 1 || 1)) * cw;
+    const d = dates[i];
+    ctx.fillText(`${d.slice(4,6)}/${d.slice(6,8)}`, x, h - pad.bottom + 16);
+  }
+
+  // Zero line
+  if (minV < 0 && maxV > 0 && suffix === '$') {
+    const zeroY = pad.top + ((maxV - 0) / range) * ch;
+    ctx.strokeStyle = '#4a5568'; ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, zeroY); ctx.lineTo(w - pad.right, zeroY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Draw lines
+  PLAYERS.forEach(p => {
+    const data = seriesData[p] || [];
+    if (data.length === 0) return;
+    ctx.strokeStyle = colors[p]; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = pad.left + (i / (dates.length - 1 || 1)) * cw;
+      const y = pad.top + ((maxV - v) / range) * ch;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    // Dot on last point
+    if (data.length > 0) {
+      const lx = pad.left + ((data.length - 1) / (dates.length - 1 || 1)) * cw;
+      const ly = pad.top + ((maxV - data[data.length - 1]) / range) * ch;
+      ctx.fillStyle = colors[p];
+      ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fill();
+      // Label
+      ctx.fillStyle = colors[p]; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(`${p}`, lx + 8, ly + 4);
+    }
+  });
+}
+
+function drawGroupedBarChart(canvasId, labels, playerColors, groups) {
+  const { ctx, w, h } = setupCanvas(canvasId);
+  const pad = { top: 20, right: 20, bottom: 50, left: 40 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  const maxVal = Math.max(1, ...groups.flatMap(g => g.values));
+  const groupWidth = cw / labels.length;
+  const barWidth = (groupWidth * 0.7) / groups.length;
+  const gap = groupWidth * 0.15;
+
+  // Grid
+  ctx.strokeStyle = '#2d3154'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ch / 4) * i;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
+    const val = Math.round(maxVal - (maxVal / 4) * i);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(val, pad.left - 6, y + 4);
+  }
+
+  // Bars
+  labels.forEach((label, li) => {
+    const groupX = pad.left + li * groupWidth + gap;
+    groups.forEach((group, gi) => {
+      const x = groupX + gi * barWidth;
+      const barH = (group.values[li] / maxVal) * ch;
+      const y = pad.top + ch - barH;
+      ctx.fillStyle = group.color;
+      ctx.beginPath();
+      roundRect(ctx, x, y, barWidth - 2, barH, 3);
+      ctx.fill();
+      // Value on top
+      if (group.values[li] > 0) {
+        ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(group.values[li], x + (barWidth - 2) / 2, y - 4);
+      }
+    });
+    // Player label
+    ctx.fillStyle = '#94a3b8'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(label, pad.left + li * groupWidth + groupWidth / 2, h - pad.bottom + 16);
+  });
+
+  // Legend
+  let legendX = pad.left;
+  const legendY = h - 10;
+  ctx.font = '10px sans-serif';
+  groups.forEach(g => {
+    ctx.fillStyle = g.color;
+    ctx.fillRect(legendX, legendY - 8, 10, 10);
+    ctx.fillStyle = '#94a3b8'; ctx.textAlign = 'left';
+    ctx.fillText(g.label, legendX + 13, legendY);
+    legendX += ctx.measureText(g.label).width + 24;
+  });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  if (h < 1) { ctx.rect(x, y, w, h); return; }
+  r = Math.min(r, h / 2, w / 2);
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 // ============================================================
