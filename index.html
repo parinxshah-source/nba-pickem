@@ -99,6 +99,14 @@
     margin-bottom: 12px; flex-wrap: wrap; gap: 8px;
   }
   .card-title { font-weight: 700; font-size: 1rem; }
+  .chart-legend {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 16px;
+    margin-top: 10px; font-size: 0.85rem; color: var(--text);
+  }
+  .chart-legend .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .chart-legend .legend-swatch {
+    width: 14px; height: 14px; border-radius: 3px; display: inline-block;
+  }
   .badge {
     padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
   }
@@ -354,6 +362,7 @@
     <div class="card">
       <div class="card-header"><div class="card-title">Running P&L Over Time</div></div>
       <canvas id="chartPnl" height="250" style="width:100%;"></canvas>
+      <div id="chartPnlLegend" class="chart-legend"></div>
     </div>
     <div class="stats-grid" style="margin-top:12px;">
       <div class="card">
@@ -1406,7 +1415,7 @@ async function loadDashboard() {
   const COLORS = { Parin: '#4a6cf7', Shamin: '#22c55e', Zeeshan: '#fbbf24' };
 
   // 1. Running P&L line chart
-  drawLineChart('chartPnl', dates, runningPnl, COLORS, '$', 'P&L');
+  drawLineChart('chartPnl', dates, runningPnl, COLORS, '$', 'P&L', { legendElId: 'chartPnlLegend' });
 
   // 2. Win/Loss bar chart
   drawGroupedBarChart('chartWinLoss', PLAYERS, COLORS,
@@ -1455,7 +1464,14 @@ function setupCanvas(canvasId) {
   return { ctx, w: rect.width, h: rect.height };
 }
 
-function drawLineChart(canvasId, dates, seriesData, colors, suffix, label) {
+function drawLineChart(canvasId, dates, seriesData, colors, suffix, label, options) {
+  const opts = options || {};
+  const legendEl = opts.legendElId ? document.getElementById(opts.legendElId) : null;
+  if (legendEl) {
+    legendEl.innerHTML = PLAYERS.map(p =>
+      `<span class="legend-item"><span class="legend-swatch" style="background:${colors[p]}"></span>${p}</span>`
+    ).join('');
+  }
   const { ctx, w, h } = setupCanvas(canvasId);
   if (dates.length === 0) {
     ctx.fillStyle = '#94a3b8'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
@@ -1522,9 +1538,10 @@ function drawLineChart(canvasId, dates, seriesData, colors, suffix, label) {
       const ly = pad.top + ((maxV - data[data.length - 1]) / range) * ch;
       ctx.fillStyle = colors[p];
       ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fill();
-      // Label
-      ctx.fillStyle = colors[p]; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText(`${p}`, lx + 8, ly + 4);
+      if (!legendEl) {
+        ctx.fillStyle = colors[p]; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left';
+        ctx.fillText(`${p}`, lx + 8, ly + 4);
+      }
     }
   });
 }
