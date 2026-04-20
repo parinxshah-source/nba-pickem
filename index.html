@@ -1415,7 +1415,7 @@ async function loadDashboard() {
 
   // 3. Bet type bar chart
   drawGroupedBarChart('chartBetType', PLAYERS, COLORS,
-    [{ label: 'Spread W', values: PLAYERS.map(p => stats[p].spreadW), color: '#4a6cf7' },
+    [{ label: 'Spread W', values: PLAYERS.map(p => stats[p].spreadW), color: '#f97316' },
      { label: 'Spread L', values: PLAYERS.map(p => stats[p].spreadL), color: '#6366f1' },
      { label: 'O/U W', values: PLAYERS.map(p => stats[p].ouW), color: '#22c55e' },
      { label: 'O/U L', values: PLAYERS.map(p => stats[p].ouL), color: '#ef4444' }]);
