@@ -377,6 +377,7 @@
     <div class="card" style="margin-top:12px;">
       <div class="card-header"><div class="card-title">Win % Trend Over Time</div></div>
       <canvas id="chartWinPct" height="250" style="width:100%;"></canvas>
+      <div id="chartWinPctLegend" class="chart-legend"></div>
     </div>
     <div class="card" style="margin-top:12px;">
       <div class="card-header"><div class="card-title">Win/Loss by Player</div></div>
@@ -1430,7 +1431,7 @@ async function loadDashboard() {
      { label: 'O/U L', values: PLAYERS.map(p => stats[p].ouL), color: '#ef4444' }]);
 
   // 4. Win % trend line chart
-  drawLineChart('chartWinPct', dates, runningWins, COLORS, '%', 'Win %');
+  drawLineChart('chartWinPct', dates, runningWins, COLORS, '%', 'Win %', { legendElId: 'chartWinPctLegend' });
 
   // Pivot table
   const pivot = document.getElementById('pivotTable');
