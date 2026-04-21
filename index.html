@@ -1585,9 +1585,12 @@ function drawGroupedBarChart(canvasId, labels, playerColors, groups) {
         ctx.fillText(group.values[li], x + (barWidth - 2) / 2, y - 4);
       }
     });
-    // Player label
-    ctx.fillStyle = '#94a3b8'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(label, pad.left + li * groupWidth + groupWidth / 2, h - pad.bottom + 16);
+    // Player label — centered under the full bar group
+    const firstBarLeft = groupX;
+    const lastBarRight = groupX + (groups.length - 1) * barWidth + (barWidth - 2);
+    ctx.fillStyle = '#94a3b8'; ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, (firstBarLeft + lastBarRight) / 2, h - pad.bottom + 18);
   });
 
   // Legend
