@@ -66,6 +66,11 @@
   }
   .modal h2 { margin-bottom: 8px; font-size: 1.4rem; }
   .modal p { color: var(--text-dim); margin-bottom: 24px; font-size: 0.9rem; }
+  .player-photo {
+    display: block; width: 100%; height: auto;
+    border-radius: 12px; margin: 12px 0 20px;
+    border: 1px solid var(--border);
+  }
   .player-grid { display: flex; flex-direction: column; gap: 10px; }
   .player-btn {
     padding: 14px; border: 2px solid var(--border); background: var(--surface2);
@@ -311,6 +316,7 @@
 <div class="modal-overlay" id="playerModal">
   <div class="modal">
     <h2>NBA Playoff Pick'em</h2>
+    <img src="players.jpg" alt="Parin, Zeeshan, and Shamin" class="player-photo">
     <p>Select your name to get started</p>
     <div class="player-grid">
       <button class="player-btn" onclick="selectPlayer('Parin')">Parin</button>
