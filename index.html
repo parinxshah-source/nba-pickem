@@ -1376,8 +1376,25 @@ async function loadDashboard() {
     }
   }
 
-  // Net balance = pnl adjusted for recorded payments (matches Payments tab)
-  PLAYERS.forEach(p => { stats[p].netBalance = stats[p].pnl; });
+  // Net balance using 3-way split (matches Payments tab):
+  // each win splits the pot: other two players each owe the winner amount/2;
+  // each loss: bettor owes each of the other two amount/2.
+  PLAYERS.forEach(p => { stats[p].netBalance = 0; });
+  const n = PLAYERS.length;
+  for (const pick of allPicks) {
+    if (pick.result === 'win') {
+      stats[pick.player].netBalance += pick.amount * (n - 1) / 2;
+      PLAYERS.forEach(other => {
+        if (other !== pick.player) stats[other].netBalance -= pick.amount / 2;
+      });
+    } else if (pick.result === 'loss') {
+      stats[pick.player].netBalance -= pick.amount * (n - 1) / 2;
+      PLAYERS.forEach(other => {
+        if (other !== pick.player) stats[other].netBalance += pick.amount / 2;
+      });
+    }
+  }
+  // Subtract recorded payments (debtor paid → their balance rises toward 0; creditor's falls toward 0)
   for (const payId in payments) {
     const pay = payments[payId];
     if (stats[pay.from]) stats[pay.from].netBalance += pay.amount;
@@ -1407,8 +1424,19 @@ async function loadDashboard() {
   for (const date of dates) {
     const dayPicks = allPicks.filter(p => p.date === date);
     for (const pick of dayPicks) {
-      if (pick.result === 'win') { cumPnl[pick.player] += pick.amount; cumW[pick.player]++; cumT[pick.player]++; }
-      else if (pick.result === 'loss') { cumPnl[pick.player] -= pick.amount; cumT[pick.player]++; }
+      if (pick.result === 'win') {
+        cumPnl[pick.player] += pick.amount * (n - 1) / 2;
+        PLAYERS.forEach(other => {
+          if (other !== pick.player) cumPnl[other] -= pick.amount / 2;
+        });
+        cumW[pick.player]++; cumT[pick.player]++;
+      } else if (pick.result === 'loss') {
+        cumPnl[pick.player] -= pick.amount * (n - 1) / 2;
+        PLAYERS.forEach(other => {
+          if (other !== pick.player) cumPnl[other] += pick.amount / 2;
+        });
+        cumT[pick.player]++;
+      }
     }
     const dayPayments = paymentsByDate[date] || [];
     for (const pay of dayPayments) {
