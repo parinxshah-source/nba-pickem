@@ -1345,10 +1345,12 @@ function switchTab(tab) {
 async function loadDashboard() {
   const snap = await db.ref('picks').once('value');
   const allData = snap.val() || {};
+  const paymentsSnap = await db.ref('payments').once('value');
+  const payments = paymentsSnap.val() || {};
 
   // Aggregate stats
   const stats = {};
-  PLAYERS.forEach(p => stats[p] = { wins: 0, losses: 0, pushes: 0, pnl: 0, picks: 0,
+  PLAYERS.forEach(p => stats[p] = { wins: 0, losses: 0, pushes: 0, pnl: 0, netBalance: 0, picks: 0,
     spreadW: 0, spreadL: 0, ouW: 0, ouL: 0 });
 
   // Time-series data: collect all picks with dates, sorted chronologically
@@ -1374,11 +1376,29 @@ async function loadDashboard() {
     }
   }
 
+  // Net balance = pnl adjusted for recorded payments (matches Payments tab)
+  PLAYERS.forEach(p => { stats[p].netBalance = stats[p].pnl; });
+  for (const payId in payments) {
+    const pay = payments[payId];
+    if (stats[pay.from]) stats[pay.from].netBalance += pay.amount;
+    if (stats[pay.to]) stats[pay.to].netBalance -= pay.amount;
+  }
+
   // Sort chronologically
   allPicks.sort((a, b) => a.date.localeCompare(b.date) || (a.timestamp || 0) - (b.timestamp || 0));
 
-  // Build time-series: running P&L and win% per player per date
-  const dates = [...new Set(allPicks.map(p => p.date))].sort();
+  // Group payments by date (YYYYMMDD) so they can be applied chronologically
+  const paymentsByDate = {};
+  for (const payId in payments) {
+    const pay = payments[payId];
+    if (!pay.timestamp) continue;
+    const d = new Date(pay.timestamp);
+    const ds = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    (paymentsByDate[ds] = paymentsByDate[ds] || []).push(pay);
+  }
+
+  // Build time-series: running net balance and win% per player per date
+  const dates = [...new Set([...allPicks.map(p => p.date), ...Object.keys(paymentsByDate)])].sort();
   const runningPnl = {}; const runningWins = {}; const runningTotal = {};
   PLAYERS.forEach(p => { runningPnl[p] = []; runningWins[p] = []; runningTotal[p] = []; });
   const cumPnl = {}; const cumW = {}; const cumT = {};
@@ -1390,15 +1410,20 @@ async function loadDashboard() {
       if (pick.result === 'win') { cumPnl[pick.player] += pick.amount; cumW[pick.player]++; cumT[pick.player]++; }
       else if (pick.result === 'loss') { cumPnl[pick.player] -= pick.amount; cumT[pick.player]++; }
     }
+    const dayPayments = paymentsByDate[date] || [];
+    for (const pay of dayPayments) {
+      if (cumPnl[pay.from] !== undefined) cumPnl[pay.from] += pay.amount;
+      if (cumPnl[pay.to] !== undefined) cumPnl[pay.to] -= pay.amount;
+    }
     PLAYERS.forEach(p => {
       runningPnl[p].push(cumPnl[p]);
       runningWins[p].push(cumT[p] > 0 ? (cumW[p] / cumT[p]) * 100 : 0);
     });
   }
 
-  // Find leader
-  let maxPnl = -Infinity; let leader = '';
-  PLAYERS.forEach(p => { if (stats[p].pnl > maxPnl) { maxPnl = stats[p].pnl; leader = p; } });
+  // Find leader by net balance
+  let maxBal = -Infinity; let leader = '';
+  PLAYERS.forEach(p => { if (stats[p].netBalance > maxBal) { maxBal = stats[p].netBalance; leader = p; } });
 
   // Render stat cards
   const grid = document.getElementById('statsGrid');
@@ -1407,9 +1432,10 @@ async function loadDashboard() {
     const s = stats[p];
     const total = s.wins + s.losses;
     const pct = total > 0 ? ((s.wins / total) * 100).toFixed(1) : '0.0';
-    const pnlClass = s.pnl > 0 ? 'pnl-pos' : s.pnl < 0 ? 'pnl-neg' : 'pnl-zero';
-    const pnlSign = s.pnl > 0 ? '+' : '';
-    const isLeader = p === leader && maxPnl > 0;
+    const bal = s.netBalance;
+    const pnlClass = bal > 0 ? 'pnl-pos' : bal < 0 ? 'pnl-neg' : 'pnl-zero';
+    const pnlSign = bal > 0 ? '+' : bal < 0 ? '-' : '';
+    const isLeader = p === leader && maxBal > 0;
     grid.innerHTML += `
       <div class="stat-card ${isLeader ? 'leader' : ''}">
         <div class="stat-name">${p}</div>
@@ -1418,7 +1444,7 @@ async function loadDashboard() {
         ${s.pushes > 0 ? `<div class="stat-row"><span class="stat-label">Pushes</span><span class="stat-value">${s.pushes}</span></div>` : ''}
         <div class="stat-row"><span class="stat-label">Win %</span><span class="stat-value">${pct}%</span></div>
         <div class="stat-row"><span class="stat-label">Total Picks</span><span class="stat-value">${s.picks}</span></div>
-        <div class="stat-pnl ${pnlClass}">${pnlSign}$${s.pnl}</div>
+        <div class="stat-pnl ${pnlClass}">${pnlSign}$${Math.abs(bal).toFixed(2)}</div>
       </div>
     `;
   });
@@ -1651,17 +1677,6 @@ async function loadGameLog() {
   // Sort by date desc, then timestamp desc
   rows.sort((a, b) => b.date.localeCompare(a.date) || (b.timestamp || 0) - (a.timestamp || 0));
 
-  // Compute running total per player
-  const running = {};
-  PLAYERS.forEach(p => running[p] = 0);
-  // Need to process in chronological order for running total
-  const chronoRows = [...rows].reverse();
-  chronoRows.forEach(r => {
-    if (r.result === 'win') running[r.player] += r.amount;
-    else if (r.result === 'loss') running[r.player] -= r.amount;
-    r.runningTotal = running[r.player];
-  });
-
   const table = document.getElementById('logTable');
   const dateFormatted = (ds) => {
     const y = ds.slice(0,4), m = ds.slice(4,6), d = ds.slice(6,8);
@@ -1669,14 +1684,12 @@ async function loadGameLog() {
   };
 
   table.innerHTML = `
-    <thead><tr><th>Date</th><th>Game</th><th>Pick</th><th>Bettor</th><th>Amt</th><th>Result</th><th>Running</th></tr></thead>
+    <thead><tr><th>Date</th><th>Game</th><th>Pick</th><th>Bettor</th><th>Amt</th><th>Result</th></tr></thead>
     <tbody>
-      ${rows.length === 0 ? '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:30px;">No picks yet</td></tr>' :
+      ${rows.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:30px;">No picks yet</td></tr>' :
         rows.map(r => {
           const rClass = r.result === 'win' ? 'result-win' : r.result === 'loss' ? 'result-loss' : '';
           const rText = r.result === 'win' ? 'WIN' : r.result === 'loss' ? 'LOSS' : r.result === 'push' ? 'PUSH' : '—';
-          const rtClass = r.runningTotal > 0 ? 'result-win' : r.runningTotal < 0 ? 'result-loss' : '';
-          const rtSign = r.runningTotal > 0 ? '+' : '';
           return `<tr>
             <td>${dateFormatted(r.date)}</td>
             <td>${r.gameLabel || '—'}</td>
@@ -1684,7 +1697,6 @@ async function loadGameLog() {
             <td>${r.player}</td>
             <td>$${r.amount}</td>
             <td class="${rClass}">${rText}</td>
-            <td class="${rtClass}">${rtSign}$${r.runningTotal}</td>
           </tr>`;
         }).join('')}
     </tbody>
