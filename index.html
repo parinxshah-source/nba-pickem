@@ -1228,25 +1228,30 @@ async function loadPayments() {
     }
   }
 
-  // Compute net between each pair
-  const pairs = [];
-  const seen = {};
+  // Compute each player's net balance (positive = owed money, negative = owes money)
+  const balances = {};
+  PLAYERS.forEach(p => { balances[p] = 0; });
   PLAYERS.forEach(a => {
     PLAYERS.forEach(b => {
       if (a === b) return;
-      const key = [a, b].sort().join('-');
-      if (seen[key]) return;
-      seen[key] = true;
-      const aOwesB = ledger[a][b] || 0;
-      const bOwesA = ledger[b][a] || 0;
-      const net = aOwesB - bOwesA;
-      if (Math.abs(net) > 0.001) {
-        const from = net > 0 ? a : b;
-        const to = net > 0 ? b : a;
-        pairs.push({ from, to, amount: Math.abs(net) });
-      }
+      balances[a] -= ledger[a][b] || 0;
+      balances[b] += ledger[a][b] || 0;
     });
   });
+
+  // Greedy minimization: repeatedly settle the largest debtor against the largest creditor
+  const pairs = [];
+  const working = Object.entries(balances).map(([name, bal]) => ({ name, bal }));
+  while (true) {
+    working.sort((a, b) => a.bal - b.bal);
+    const debtor = working[0];
+    const creditor = working[working.length - 1];
+    if (!debtor || !creditor || creditor.bal < 0.01 || debtor.bal > -0.01) break;
+    const amount = Math.min(creditor.bal, -debtor.bal);
+    pairs.push({ from: debtor.name, to: creditor.name, amount });
+    debtor.bal += amount;
+    creditor.bal -= amount;
+  }
 
   // Render payment schedule
   const nextDate = getNextPaymentDate();
