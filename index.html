@@ -1404,18 +1404,9 @@ async function loadDashboard() {
   // Sort chronologically
   allPicks.sort((a, b) => a.date.localeCompare(b.date) || (a.timestamp || 0) - (b.timestamp || 0));
 
-  // Group payments by date (YYYYMMDD) so they can be applied chronologically
-  const paymentsByDate = {};
-  for (const payId in payments) {
-    const pay = payments[payId];
-    if (!pay.timestamp) continue;
-    const d = new Date(pay.timestamp);
-    const ds = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-    (paymentsByDate[ds] = paymentsByDate[ds] || []).push(pay);
-  }
-
-  // Build time-series: running net balance and win% per player per date
-  const dates = [...new Set([...allPicks.map(p => p.date), ...Object.keys(paymentsByDate)])].sort();
+  // Build time-series: running P&L (from picks only) and win% per player per date.
+  // Payments are intentionally excluded — the P&L chart tracks pick performance, not settlements.
+  const dates = [...new Set(allPicks.map(p => p.date))].sort();
   const runningPnl = {}; const runningWins = {}; const runningTotal = {};
   PLAYERS.forEach(p => { runningPnl[p] = []; runningWins[p] = []; runningTotal[p] = []; });
   const cumPnl = {}; const cumW = {}; const cumT = {};
@@ -1437,11 +1428,6 @@ async function loadDashboard() {
         });
         cumT[pick.player]++;
       }
-    }
-    const dayPayments = paymentsByDate[date] || [];
-    for (const pay of dayPayments) {
-      if (cumPnl[pay.from] !== undefined) cumPnl[pay.from] += pay.amount;
-      if (cumPnl[pay.to] !== undefined) cumPnl[pay.to] -= pay.amount;
     }
     PLAYERS.forEach(p => {
       runningPnl[p].push(cumPnl[p]);
@@ -1567,13 +1553,19 @@ function drawLineChart(canvasId, dates, seriesData, colors, suffix, label, optio
     ctx.fillText(`${suffix === '$' ? '$' : ''}${Math.round(val)}${suffix === '%' ? '%' : ''}`, pad.left - 6, y + 4);
   }
 
-  // X-axis labels
+  // X-axis labels — one per ISO week (label the first date seen in each week)
   ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
-  const maxLabels = Math.min(dates.length, 10);
-  const step = Math.max(1, Math.floor(dates.length / maxLabels));
-  for (let i = 0; i < dates.length; i += step) {
-    const x = pad.left + (i / (dates.length - 1 || 1)) * cw;
+  let lastWeekKey = null;
+  for (let i = 0; i < dates.length; i++) {
     const d = dates[i];
+    const dateObj = new Date(+d.slice(0,4), +d.slice(4,6) - 1, +d.slice(6,8));
+    const dow = dateObj.getDay();
+    const monday = new Date(dateObj);
+    monday.setDate(dateObj.getDate() + (dow === 0 ? -6 : 1 - dow));
+    const weekKey = `${monday.getFullYear()}-${monday.getMonth()}-${monday.getDate()}`;
+    if (weekKey === lastWeekKey) continue;
+    lastWeekKey = weekKey;
+    const x = pad.left + (i / (dates.length - 1 || 1)) * cw;
     ctx.fillText(`${d.slice(4,6)}/${d.slice(6,8)}`, x, h - pad.bottom + 16);
   }
 
