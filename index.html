@@ -112,6 +112,28 @@
   .chart-legend .legend-swatch {
     width: 14px; height: 14px; border-radius: 3px; display: inline-block;
   }
+  /* Daily P&L heatmap */
+  .heatmap { padding: 6px 0 0; }
+  .heat-row {
+    display: grid; grid-template-columns: 70px 1fr; align-items: center;
+    gap: 10px; margin-bottom: 4px;
+  }
+  .heat-label { font-size: 0.85rem; color: var(--text); font-weight: 600; }
+  .heat-cells {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .heat-cell {
+    aspect-ratio: 1; min-height: 10px; border-radius: 2px;
+    background: #000;
+  }
+  .heat-cell.heat-win { background: var(--green); }
+  .heat-cell.heat-loss { background: var(--red); }
+  .heat-cell.heat-mixed { background: var(--text-dim); }
+  .heat-axis {
+    display: flex; justify-content: space-between; margin-top: 6px;
+    padding-left: 80px; font-size: 0.7rem; color: var(--text-dim);
+  }
   .badge {
     padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
   }
@@ -369,6 +391,17 @@
       <div class="card-header"><div class="card-title">Running P&L Over Time</div></div>
       <canvas id="chartPnl" height="250" style="width:100%;"></canvas>
       <div id="chartPnlLegend" class="chart-legend"></div>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <div class="card-header"><div class="card-title">Daily Pick Outcomes</div></div>
+      <div class="heatmap" id="heatmapBody"></div>
+      <div class="heat-axis"><span id="heatStart"></span><span id="heatEnd"></span></div>
+      <div class="chart-legend" style="margin-top:10px;">
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--green)"></span>All wins</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--red)"></span>All losses</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:var(--text-dim)"></span>Mixed</span>
+        <span class="legend-item"><span class="legend-swatch" style="background:#000;border:1px solid var(--border);"></span>No picks</span>
+      </div>
     </div>
     <div class="stats-grid" style="margin-top:12px;">
       <div class="card">
@@ -1468,6 +1501,75 @@ async function loadDashboard() {
       }).join('')}
     </tbody>
   `;
+
+  // Daily pick-outcome heatmap (raw pick P&L per player per day)
+  renderDailyHeatmap(allPicks);
+}
+
+function renderDailyHeatmap(allPicks) {
+  const heatBody = document.getElementById('heatmapBody');
+  if (!heatBody) return;
+  if (!allPicks.length) {
+    heatBody.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;padding:8px;">No picks yet.</p>';
+    document.getElementById('heatStart').textContent = '';
+    document.getElementById('heatEnd').textContent = '';
+    return;
+  }
+
+  // Build per-player per-date tally from each player's own picks (raw)
+  const byPlayer = {};
+  PLAYERS.forEach(p => { byPlayer[p] = {}; });
+  for (const pick of allPicks) {
+    const d = pick.date;
+    if (!byPlayer[pick.player][d]) byPlayer[pick.player][d] = { w: 0, l: 0, p: 0, pending: 0, pnl: 0 };
+    const slot = byPlayer[pick.player][d];
+    if (pick.result === 'win') { slot.w++; slot.pnl += pick.amount; }
+    else if (pick.result === 'loss') { slot.l++; slot.pnl -= pick.amount; }
+    else if (pick.result === 'push') { slot.p++; }
+    else { slot.pending++; }
+  }
+
+  // Full calendar from earliest pick to today
+  const allDates = [...new Set(allPicks.map(p => p.date))].sort();
+  const start = allDates[0];
+  const today = new Date().toISOString().slice(0, 10);
+  const end = today > allDates[allDates.length - 1] ? today : allDates[allDates.length - 1];
+  const days = [];
+  const cursor = new Date(start + 'T00:00:00');
+  const endD = new Date(end + 'T00:00:00');
+  while (cursor <= endD) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const fmt = iso => {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  heatBody.innerHTML = PLAYERS.map(p => {
+    const cells = days.map(d => {
+      const s = byPlayer[p][d];
+      let cls = 'heat-none', tip = `${fmt(d)} — no picks`;
+      if (s) {
+        if (s.w > 0 && s.l === 0) cls = 'heat-win';
+        else if (s.l > 0 && s.w === 0) cls = 'heat-loss';
+        else cls = 'heat-mixed';
+        const parts = [];
+        if (s.w) parts.push(`${s.w}W`);
+        if (s.l) parts.push(`${s.l}L`);
+        if (s.p) parts.push(`${s.p}P`);
+        if (s.pending) parts.push(`${s.pending} pending`);
+        const sign = s.pnl > 0 ? '+' : s.pnl < 0 ? '-' : '';
+        tip = `${fmt(d)} — ${parts.join(' ')} · ${sign}$${Math.abs(s.pnl)}`;
+      }
+      return `<div class="heat-cell ${cls}" title="${tip}"></div>`;
+    }).join('');
+    return `<div class="heat-row"><div class="heat-label">${p}</div><div class="heat-cells">${cells}</div></div>`;
+  }).join('');
+
+  document.getElementById('heatStart').textContent = fmt(start);
+  document.getElementById('heatEnd').textContent = fmt(end);
 }
 
 // ============================================================
