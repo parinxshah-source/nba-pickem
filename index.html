@@ -1529,23 +1529,25 @@ function renderDailyHeatmap(allPicks) {
     else { slot.pending++; }
   }
 
+  // Dates in this app are stored as "YYYYMMDD" (no dashes).
+  const parseDs = ds => new Date(parseInt(ds.slice(0,4)), parseInt(ds.slice(4,6)) - 1, parseInt(ds.slice(6,8)));
+  const fmtDs = d => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+
   // Full calendar from earliest pick to today
   const allDates = [...new Set(allPicks.map(p => p.date))].sort();
   const start = allDates[0];
-  const today = new Date().toISOString().slice(0, 10);
-  const end = today > allDates[allDates.length - 1] ? today : allDates[allDates.length - 1];
+  const today = fmtDs(new Date());
+  const lastPick = allDates[allDates.length - 1];
+  const end = today > lastPick ? today : lastPick;
   const days = [];
-  const cursor = new Date(start + 'T00:00:00');
-  const endD = new Date(end + 'T00:00:00');
+  const cursor = parseDs(start);
+  const endD = parseDs(end);
   while (cursor <= endD) {
-    days.push(cursor.toISOString().slice(0, 10));
+    days.push(fmtDs(cursor));
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  const fmt = iso => {
-    const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+  const fmt = ds => parseDs(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   heatBody.innerHTML = PLAYERS.map(p => {
     const cells = days.map(d => {
