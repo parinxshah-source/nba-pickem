@@ -944,18 +944,6 @@ function renderAdminGames(games) {
       <div class="card-header">
         <div class="card-title">${g.away.abbr} @ ${g.home.abbr}</div>
       </div>
-      ${g.spread == null ? `
-      <div class="manual-lines" style="margin-bottom:12px;">
-        <label>Spread:</label>
-        <select id="admin-spread-team-${g.id}" style="width:70px;padding:6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.8rem;">
-          <option value="${g.home.abbr}">${g.home.abbr}</option>
-          <option value="${g.away.abbr}">${g.away.abbr}</option>
-        </select>
-        <input type="number" step="0.5" placeholder="-5.5" id="admin-spread-val-${g.id}" style="width:65px;">
-        <label>O/U:</label>
-        <input type="number" step="0.5" placeholder="224.5" id="admin-ou-val-${g.id}" style="width:65px;">
-        <button class="btn btn-primary btn-sm" onclick="saveAdminLines('${g.id}')">Set Lines</button>
-      </div>` : ''}
       <div class="score-inputs">
         <label>${g.away.abbr}:</label>
         <input type="number" id="score-away-${g.id}" placeholder="0" value="${g.away.score || ''}">
@@ -987,25 +975,6 @@ function renderAdminGames(games) {
       }
     }
   });
-}
-
-function saveAdminLines(gameId) {
-  const teamSel = document.getElementById(`admin-spread-team-${gameId}`);
-  const spreadVal = document.getElementById(`admin-spread-val-${gameId}`);
-  const ouVal = document.getElementById(`admin-ou-val-${gameId}`);
-  const spread = parseFloat(spreadVal.value);
-  const ou = parseFloat(ouVal.value);
-  if (isNaN(spread) || isNaN(ou)) { toast('Enter valid values', 'error'); return; }
-
-  db.ref(`games/${currentDate}/${gameId}/lines`).set({
-    spread: Math.abs(spread),
-    spreadTeam: teamSel.value,
-    overUnder: ou
-  });
-
-  const g = gamesCache[currentDate]?.find(x => x.id === gameId);
-  if (g) { g.spread = Math.abs(spread); g.spreadTeam = teamSel.value; g.overUnder = ou; }
-  toast('Lines saved!', 'success');
 }
 
 async function saveScore(gameId) {
