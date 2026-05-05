@@ -1395,10 +1395,12 @@ async function loadDashboard() {
     }
   }
   // Subtract recorded payments (debtor paid → their balance rises toward 0; creditor's falls toward 0)
+  // Also track each player's settled cash flow: positive = winnings collected, negative = losses paid out.
+  PLAYERS.forEach(p => { stats[p].paidSettled = 0; });
   for (const payId in payments) {
     const pay = payments[payId];
-    if (stats[pay.from]) stats[pay.from].netBalance += pay.amount;
-    if (stats[pay.to]) stats[pay.to].netBalance -= pay.amount;
+    if (stats[pay.from]) { stats[pay.from].netBalance += pay.amount; stats[pay.from].paidSettled -= pay.amount; }
+    if (stats[pay.to]) { stats[pay.to].netBalance -= pay.amount; stats[pay.to].paidSettled += pay.amount; }
   }
 
   // Sort chronologically
@@ -1457,7 +1459,7 @@ async function loadDashboard() {
         <div class="stat-row"><span class="stat-label">Losses</span><span class="stat-value result-loss">${s.losses}</span></div>
         ${s.pushes > 0 ? `<div class="stat-row"><span class="stat-label">Pushes</span><span class="stat-value">${s.pushes}</span></div>` : ''}
         <div class="stat-row"><span class="stat-label">Win %</span><span class="stat-value">${pct}%</span></div>
-        <div class="stat-row"><span class="stat-label">Total Picks</span><span class="stat-value">${s.picks}</span></div>
+        <div class="stat-row"><span class="stat-label">Paid (settled)</span><span class="stat-value ${s.paidSettled > 0 ? 'result-win' : s.paidSettled < 0 ? 'result-loss' : ''}">${s.paidSettled > 0 ? '+' : s.paidSettled < 0 ? '-' : ''}$${Math.abs(s.paidSettled).toFixed(2)}</span></div>
         <div class="stat-pnl ${pnlClass}">${pnlSign}$${Math.abs(bal).toFixed(2)}</div>
       </div>
     `;
@@ -1487,15 +1489,13 @@ async function loadDashboard() {
   // Pivot table
   const pivot = document.getElementById('pivotTable');
   pivot.innerHTML = `
-    <thead><tr><th>Player</th><th>W</th><th>L</th><th>P</th><th>Win%</th><th>Spr W-L</th><th>O/U W-L</th><th>P&L</th></tr></thead>
+    <thead><tr><th>Player</th><th>W</th><th>L</th><th>P</th><th>Win%</th><th>Spr W-L</th><th>O/U W-L</th></tr></thead>
     <tbody>
       ${PLAYERS.map(p => {
         const s = stats[p];
         const total = s.wins + s.losses;
         const pct = total > 0 ? ((s.wins / total) * 100).toFixed(1) : '0.0';
-        const pnlClass = s.pnl > 0 ? 'result-win' : s.pnl < 0 ? 'result-loss' : '';
-        const pnlSign = s.pnl > 0 ? '+' : '';
-        return `<tr><td>${p}</td><td class="result-win">${s.wins}</td><td class="result-loss">${s.losses}</td><td>${s.pushes}</td><td>${pct}%</td><td>${s.spreadW}-${s.spreadL}</td><td>${s.ouW}-${s.ouL}</td><td class="${pnlClass}">${pnlSign}$${s.pnl}</td></tr>`;
+        return `<tr><td>${p}</td><td class="result-win">${s.wins}</td><td class="result-loss">${s.losses}</td><td>${s.pushes}</td><td>${pct}%</td><td>${s.spreadW}-${s.spreadL}</td><td>${s.ouW}-${s.ouL}</td></tr>`;
       }).join('')}
     </tbody>
   `;
