@@ -1549,7 +1549,8 @@ function renderDailyHeatmap(allPicks) {
 
   const fmt = ds => parseDs(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-  heatBody.innerHTML = PLAYERS.map(p => {
+  const heatOrder = ['Shamin', 'Parin', 'Zeeshan'];
+  heatBody.innerHTML = heatOrder.map(p => {
     const cells = days.map(d => {
       const s = byPlayer[p][d];
       let cls = 'heat-none', tip = `${fmt(d)} — no picks`;
