@@ -1555,7 +1555,9 @@ function renderDailyHeatmap(allPicks) {
       const s = byPlayer[p][d];
       let cls = 'heat-none', tip = `${fmt(d)} — no picks`;
       if (s) {
-        if (s.w > 0 && s.l === 0) cls = 'heat-win';
+        const resolved = s.w + s.l + s.p;
+        if (resolved === 0) cls = 'heat-none';
+        else if (s.w > 0 && s.l === 0) cls = 'heat-win';
         else if (s.l > 0 && s.w === 0) cls = 'heat-loss';
         else cls = 'heat-mixed';
         const parts = [];
