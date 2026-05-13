@@ -491,12 +491,29 @@ const db = firebase.database();
 const PLAYERS = ['Parin', 'Shamin', 'Zeeshan'];
 const ROTATION = ['Shamin', 'Parin', 'Zeeshan'];
 const ROTATION_START = '20260417'; // Shamin starts April 17, 2026
+// From this date forward, the rotation advances only on days with games.
+// Off-days roll the current picker forward to the next game day.
+const ROTATION_TRANSITION_DATE = '20260512';
 const MAX_PICKS_PER_DAY = 2;
 let currentPlayer = null;
 let currentDate = getTodayET();
 let gamesCache = {};
+let gameDaysCache = null; // Set<dateStr> of dates that have ≥1 game in Firebase
+let gameDaysCachePromise = null;
 
-function getTodaysPicker(dateStr) {
+async function ensureGameDaysCache() {
+  if (gameDaysCache) return gameDaysCache;
+  if (!gameDaysCachePromise) {
+    gameDaysCachePromise = db.ref('games').once('value').then(snap => {
+      const data = snap.val() || {};
+      gameDaysCache = new Set(Object.keys(data));
+      return gameDaysCache;
+    }).catch(() => { gameDaysCache = new Set(); return gameDaysCache; });
+  }
+  return gameDaysCachePromise;
+}
+
+function calendarPicker(dateStr) {
   const startY = parseInt(ROTATION_START.slice(0,4));
   const startM = parseInt(ROTATION_START.slice(4,6)) - 1;
   const startD = parseInt(ROTATION_START.slice(6,8));
@@ -508,6 +525,26 @@ function getTodaysPicker(dateStr) {
   const diffDays = Math.round((current - start) / (1000 * 60 * 60 * 24));
   const idx = ((diffDays % ROTATION.length) + ROTATION.length) % ROTATION.length;
   return ROTATION[idx];
+}
+
+function getTodaysPicker(dateStr) {
+  // Before transition: original calendar-based rotation (preserves history).
+  if (dateStr < ROTATION_TRANSITION_DATE) return calendarPicker(dateStr);
+
+  // From transition onward: rotation advances only on game days.
+  // Anchor is whoever the calendar logic placed on the transition date.
+  const anchorPicker = calendarPicker(ROTATION_TRANSITION_DATE);
+  const anchorIdx = ROTATION.indexOf(anchorPicker);
+  if (!gameDaysCache) return anchorPicker; // pre-load fallback
+
+  // Count game days from the transition through dateStr (inclusive).
+  // First game day after transition → anchorPicker. Each subsequent game day advances the rotation by one.
+  let count = 0;
+  for (const d of gameDaysCache) {
+    if (d >= ROTATION_TRANSITION_DATE && d <= dateStr) count++;
+  }
+  if (count === 0) return anchorPicker;
+  return ROTATION[(anchorIdx + count - 1) % ROTATION.length];
 }
 
 function isPlayersTurn(player, dateStr) {
@@ -641,12 +678,17 @@ async function fetchESPNGames(dateStr) {
 // LOAD & RENDER GAMES
 // ============================================================
 async function loadGames() {
+  await ensureGameDaysCache();
   updateDateDisplay();
   const container = document.getElementById('gamesContainer');
   container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading games...</p></div>';
 
   const games = await fetchESPNGames(currentDate);
   gamesCache[currentDate] = games;
+  if (games.length > 0 && gameDaysCache) {
+    gameDaysCache.add(currentDate);
+    updateDateDisplay(); // refresh picker indicator now that we know today is a game day
+  }
 
   // Also save game info to Firebase for reference
   for (const g of games) {
@@ -1828,6 +1870,7 @@ changeDate = function(delta) {
 // ============================================================
 // INIT
 // ============================================================
+ensureGameDaysCache().then(() => updateDateDisplay());
 updateDateDisplay();
 </script>
 </body>
