@@ -695,8 +695,9 @@ async function loadGames() {
   gamesCache[currentDate] = games;
   if (games.length > 0 && gameDaysCache) {
     gameDaysCache.add(currentDate);
-    updateDateDisplay(); // refresh picker indicator now that we know today is a game day
   }
+  // Always refresh the indicator after fetch so no-game days correctly hide it.
+  updateDateDisplay();
 
   // Also save game info to Firebase for reference
   for (const g of games) {
