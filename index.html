@@ -537,14 +537,14 @@ function getTodaysPicker(dateStr) {
   const anchorIdx = ROTATION.indexOf(anchorPicker);
   if (!gameDaysCache) return anchorPicker; // pre-load fallback
 
-  // Count game days from the transition through dateStr (inclusive).
-  // First game day after transition → anchorPicker. Each subsequent game day advances the rotation by one.
-  let count = 0;
+  // Count game days STRICTLY BEFORE dateStr in the post-transition range.
+  // - On a game day: this gives that day's picker (anchor + N).
+  // - On an off-day: this rolls the picker forward to whoever's up next.
+  let priorGameDays = 0;
   for (const d of gameDaysCache) {
-    if (d >= ROTATION_TRANSITION_DATE && d <= dateStr) count++;
+    if (d >= ROTATION_TRANSITION_DATE && d < dateStr) priorGameDays++;
   }
-  if (count === 0) return anchorPicker;
-  return ROTATION[(anchorIdx + count - 1) % ROTATION.length];
+  return ROTATION[(anchorIdx + priorGameDays) % ROTATION.length];
 }
 
 function isPlayersTurn(player, dateStr) {
@@ -610,13 +610,21 @@ function updateDateDisplay() {
   if (currentDate === getTodayET()) {
     el.textContent += ' (Today)';
   }
-  const picker = getTodaysPicker(currentDate);
   const turnEl = document.getElementById('turnIndicator');
-  if (turnEl) {
-    turnEl.innerHTML = `<strong>${picker}</strong>'s turn to pick`;
-    if (currentPlayer && currentPlayer !== 'Admin' && currentPlayer !== picker) {
-      turnEl.innerHTML += ' — <span style="color:var(--red);">You cannot place picks today</span>';
-    }
+  if (!turnEl) return;
+
+  // Hide turn indicator on confirmed no-game days (games loaded but empty).
+  const loaded = gamesCache[currentDate];
+  if (Array.isArray(loaded) && loaded.length === 0) {
+    turnEl.innerHTML = '';
+    turnEl.style.display = 'none';
+    return;
+  }
+  turnEl.style.display = '';
+  const picker = getTodaysPicker(currentDate);
+  turnEl.innerHTML = `<strong>${picker}</strong>'s turn to pick`;
+  if (currentPlayer && currentPlayer !== 'Admin' && currentPlayer !== picker) {
+    turnEl.innerHTML += ' — <span style="color:var(--red);">You cannot place picks today</span>';
   }
 }
 
@@ -920,6 +928,14 @@ async function submitPick(gameId) {
 
 async function updatePicksRemaining() {
   const el = document.getElementById('picksRemaining');
+  // Hide on confirmed no-game days
+  const loaded = gamesCache[currentDate];
+  if (Array.isArray(loaded) && loaded.length === 0) {
+    el.innerHTML = '';
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
   if (currentPlayer === 'Admin') { el.textContent = 'Admin mode — view only'; return; }
   const snap = await db.ref(`picks/${currentDate}/${currentPlayer}`).once('value');
   const count = snap.val() ? Object.keys(snap.val()).length : 0;
