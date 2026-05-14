@@ -581,7 +581,6 @@ async function sha256Hex(s) {
 }
 
 function showAdminPasswordForm() {
-  if (localStorage.getItem('adminAuthed') === '1') { selectPlayer('Admin'); return; }
   const area = document.getElementById('adminAuthArea');
   area.innerHTML = `
     <form onsubmit="submitAdminPassword(event)" style="display:flex;gap:6px;justify-content:center;">
@@ -599,7 +598,6 @@ async function submitAdminPassword(e) {
   const err = document.getElementById('adminPwError');
   const hash = await sha256Hex(input.value);
   if (hash === ADMIN_PASSWORD_HASH) {
-    localStorage.setItem('adminAuthed', '1');
     selectPlayer('Admin');
   } else {
     err.textContent = 'Incorrect password';
