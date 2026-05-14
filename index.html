@@ -719,6 +719,11 @@ async function loadGames() {
   renderGames(games);
   renderAdminGames(games);
   updatePicksRemaining();
+
+  // The realtime listener may have fired before the DOM containers existed —
+  // explicitly refresh existing picks now that the game cards are in the DOM.
+  const picksSnap = await db.ref(`picks/${currentDate}`).once('value');
+  renderAllExistingPicks(picksSnap.val() || {});
 }
 
 function renderGames(games) {
