@@ -345,8 +345,8 @@
       <button class="player-btn" onclick="selectPlayer('Shamin')">Shamin</button>
       <button class="player-btn" onclick="selectPlayer('Zeeshan')">Zeeshan</button>
     </div>
-    <div style="margin-top: 16px;">
-      <button class="btn btn-outline btn-sm" onclick="selectPlayer('Admin')">Enter as Admin</button>
+    <div style="margin-top: 16px;" id="adminAuthArea">
+      <button class="btn btn-outline btn-sm" onclick="showAdminPasswordForm()">Enter as Admin</button>
     </div>
   </div>
 </div>
@@ -573,6 +573,41 @@ function displayDate(ds) {
 // ============================================================
 // PLAYER SELECTION
 // ============================================================
+const ADMIN_PASSWORD_HASH = 'ff4c7bbd5b1aa2301f2d9884c7df61fb3d71464ba0fd7979633ce312f86b716a';
+
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function showAdminPasswordForm() {
+  if (localStorage.getItem('adminAuthed') === '1') { selectPlayer('Admin'); return; }
+  const area = document.getElementById('adminAuthArea');
+  area.innerHTML = `
+    <form onsubmit="submitAdminPassword(event)" style="display:flex;gap:6px;justify-content:center;">
+      <input type="password" id="adminPwInput" placeholder="Admin password" autofocus
+             style="padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:0.9rem;">
+      <button type="submit" class="btn btn-outline btn-sm">Enter</button>
+    </form>
+    <div id="adminPwError" style="margin-top:6px;color:var(--red);font-size:0.8rem;min-height:1em;"></div>
+  `;
+}
+
+async function submitAdminPassword(e) {
+  e.preventDefault();
+  const input = document.getElementById('adminPwInput');
+  const err = document.getElementById('adminPwError');
+  const hash = await sha256Hex(input.value);
+  if (hash === ADMIN_PASSWORD_HASH) {
+    localStorage.setItem('adminAuthed', '1');
+    selectPlayer('Admin');
+  } else {
+    err.textContent = 'Incorrect password';
+    input.value = '';
+    input.focus();
+  }
+}
+
 function selectPlayer(name) {
   currentPlayer = name;
   document.getElementById('playerModal').style.display = 'none';
@@ -589,6 +624,8 @@ function selectPlayer(name) {
 function switchPlayer() {
   document.getElementById('playerModal').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  const area = document.getElementById('adminAuthArea');
+  if (area) area.innerHTML = '<button class="btn btn-outline btn-sm" onclick="showAdminPasswordForm()">Enter as Admin</button>';
 }
 
 // ============================================================
