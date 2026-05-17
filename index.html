@@ -388,11 +388,6 @@
   <div class="tab-content" id="tab-dashboard">
     <div class="stats-grid" id="statsGrid"></div>
     <div class="card">
-      <div class="card-header"><div class="card-title">Running P&L Over Time</div></div>
-      <canvas id="chartPnl" height="250" style="width:100%;"></canvas>
-      <div id="chartPnlLegend" class="chart-legend"></div>
-    </div>
-    <div class="card" style="margin-top:12px;">
       <div class="card-header"><div class="card-title">Streak Tracker</div></div>
       <div class="heatmap" id="heatmapBody"></div>
       <div class="heat-axis"><span id="heatStart"></span><span id="heatEnd"></span></div>
@@ -402,6 +397,11 @@
         <span class="legend-item"><span class="legend-swatch" style="background:var(--text-dim)"></span>Push</span>
         <span class="legend-item"><span class="legend-swatch" style="background:#000;border:1px solid var(--border);"></span>No Picks</span>
       </div>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <div class="card-header"><div class="card-title">Running P&L Over Time</div></div>
+      <canvas id="chartPnl" height="250" style="width:100%;"></canvas>
+      <div id="chartPnlLegend" class="chart-legend"></div>
     </div>
     <div class="stats-grid" style="margin-top:12px;">
       <div class="card">
