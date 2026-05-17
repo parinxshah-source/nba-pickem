@@ -679,6 +679,12 @@ async function fetchESPNGames(dateStr) {
       const odds = comp.odds?.[0] || {};
       const status = comp.status?.type?.name || 'STATUS_SCHEDULED';
       const statusDesc = comp.status?.type?.shortDetail || '';
+      // Playoff series info — ESPN exposes a summary like "Series tied 1-1" or "DET leads 2-1"
+      // via comp.series.summary. Falls back to event.notes[0].headline (e.g., "Eastern Conf. Semis - Game 5").
+      let seriesText = comp.series?.summary || '';
+      if (!seriesText && Array.isArray(event.notes) && event.notes[0]?.headline) {
+        seriesText = event.notes[0].headline;
+      }
       const game = {
         id: event.id,
         away: {
@@ -698,7 +704,8 @@ async function fetchESPNGames(dateStr) {
         overUnder: odds.overUnder != null ? parseFloat(odds.overUnder) : null,
         status: status,
         statusDesc: statusDesc,
-        startTime: event.date
+        startTime: event.date,
+        seriesText: seriesText
       };
       // Determine favorite from details if available
       if (odds.details) {
@@ -776,14 +783,17 @@ function renderGames(games) {
     const isFinal = g.status === 'STATUS_FINAL';
     const isLive = g.status === 'STATUS_IN_PROGRESS' || g.status === 'STATUS_HALFTIME';
     const badgeClass = isFinal ? 'badge-final' : isLive ? 'badge-live' : 'badge-upcoming';
-    const badgeText = isFinal ? 'Final' : isLive ? 'Live' : new Date(g.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+    const badgeText = isFinal ? 'Final' : isLive ? 'Live' : new Date(g.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles' }) + ' PST';
 
     let spreadText = g.spread != null ? `${g.spreadTeam} -${g.spread}` : 'No line';
     let ouText = g.overUnder != null ? `O/U ${g.overUnder}` : 'No line';
 
     card.innerHTML = `
       <div class="card-header">
-        <div class="card-title">${g.away.abbr} @ ${g.home.abbr}</div>
+        <div>
+          <div class="card-title">${g.away.abbr} @ ${g.home.abbr}</div>
+          ${g.seriesText ? `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px;">${g.seriesText}</div>` : ''}
+        </div>
         <span class="badge ${badgeClass}">${badgeText}</span>
       </div>
       <div class="game-matchup">
